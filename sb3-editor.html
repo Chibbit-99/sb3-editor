@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SB3 Project JSON Editor</title>
+<style>
+:root{color-scheme:dark;--bg:#071014;--panel:#0d1b20;--panel2:#10242a;--line:#214047;--text:#d9fffa;--muted:#8ba9ad;--accent:#35d6c7;--danger:#ff6b7a;--warn:#ffcf6b;--good:#6fe3a1}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at 20% 0%,#12343b 0,#071014 38%);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;height:100vh;overflow:hidden}
+.app{height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr) auto}
+.top{padding:14px 18px;border-bottom:1px solid var(--line);background:#09171bde;backdrop-filter:blur(12px);display:flex;gap:12px;align-items:center}
+.brand{font-weight:800;font-size:18px;letter-spacing:.2px;margin-right:auto}
+.brand span{color:var(--accent)}
+button,.fileBtn{border:1px solid #28535a;background:linear-gradient(180deg,#143238,#0e252a);color:var(--text);border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:650;font-family:inherit;font-size:inherit}
+.fileBtn{display:inline-flex;align-items:center}
+.fileBtn input{display:none}
+button:hover,.fileBtn:hover{border-color:#3a8f95;background:#173a40}
+button:focus-visible,.fileBtn:focus-within,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.45;cursor:not-allowed}
+.main{min-height:0;display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px;padding:12px}
+.side,.editor{min-height:0;border:1px solid var(--line);background:#0a171bd9;border-radius:12px;overflow:hidden}
+.side{display:flex;flex-direction:column}
+.sideHead,.editorHead{padding:11px 13px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:9px}
+.sideHead strong{margin-right:auto}
+.stats{padding:10px 12px;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px}
+.files{overflow:auto;padding:7px}
+.file{width:100%;text-align:left;background:transparent;border:0;border-radius:7px;padding:8px 9px;color:var(--text);font-weight:500;display:flex;gap:8px;align-items:center}
+.file:hover{background:#123037}
+.file.active{background:#164048;border-left:3px solid var(--accent);padding-left:6px}
+.file small{color:var(--muted);margin-left:auto}
+.editor{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0}
+.editorHead{color:var(--muted);padding:8px 13px}
+.editorHead .spacer{margin-right:auto}
+.status{font-size:12px}
+.ok{color:var(--good)}
+.bad{color:var(--danger)}
+
+/* tabs */
+.tabs{display:flex;gap:4px}
+.tab{background:transparent;border:1px solid transparent;color:var(--muted);padding:6px 11px}
+.tab:hover{background:#123037;border-color:transparent}
+.tab.active{color:var(--text);background:#164048;border-color:#28535a}
+.tab .beta{font-size:10px;font-weight:700;color:var(--accent);border:1px solid #28535a;border-radius:999px;padding:0 6px;margin-left:7px}
+
+/* panes */
+.panes{position:relative;min-height:0}
+.pane{position:absolute;inset:0;display:none;min-height:0}
+#paneJson.active{display:block}
+#panePseudo.active{display:grid;grid-template-rows:auto minmax(0,1fr) auto}
+.wrap{position:relative;height:100%;min-height:0}
+.code{width:100%;height:100%;resize:none;border:0;outline:0;background:#061114;color:#d9fffa;padding:18px;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;tab-size:2;white-space:pre;overflow:auto;display:block}
+.code:focus-visible{outline:none;box-shadow:inset 0 0 0 2px #35d6c755}
+
+/* pseudocode toolbar */
+.pbar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;padding:9px 13px;border-bottom:1px solid var(--line);background:#0a191e}
+.pbar label{display:inline-flex;gap:6px;align-items:center;color:var(--muted);font-size:12px;cursor:pointer}
+.pbar label.stack{cursor:default}
+.pbar select,.pbar input[type=number]{background:#0e252a;color:var(--text);border:1px solid #28535a;border-radius:8px;padding:6px 8px;font:inherit;font-size:13px}
+.pbar input[type=number]{width:64px}
+.pbar input[type=checkbox]{accent-color:var(--accent)}
+.pbar .grow{margin-right:auto}
+.pbar button{padding:6px 11px;font-size:13px}
+#pseudo{background:#050f12}
+
+/* diagnostics */
+.diag{border-top:1px solid var(--line);max-height:180px;overflow:auto;background:#08151a;font-size:12px}
+.diag summary{cursor:pointer;padding:8px 13px;color:var(--muted);position:sticky;top:0;background:#08151a}
+.diag summary b{color:var(--text)}
+.diag ul{list-style:none;margin:0;padding:0 13px 10px}
+.diag li{padding:3px 0;display:grid;grid-template-columns:52px minmax(0,1fr);gap:8px;color:var(--muted)}
+.diag .lv{font-weight:700}
+.diag .lv.error{color:var(--danger)}
+.diag .lv.note{color:var(--warn)}
+.diag .where{color:var(--text)}
+.diag pre{margin:0;padding:0 13px 12px;color:#ffb6bd;white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace}
+
+.bottom{border-top:1px solid var(--line);padding:9px 14px;color:var(--muted);font-size:12px;display:flex;gap:16px;flex-wrap:wrap}
+.bottom b{color:var(--text)}
+.drop{position:absolute;inset:0;z-index:5;display:none;place-items:center;background:#071014e8;border:2px dashed #3e858a;margin:12px;border-radius:10px;font-size:16px;font-weight:700}
+.dragging .drop{display:grid}
+.empty{padding:24px;color:var(--muted);text-align:center}
+.modal{position:fixed;inset:0;background:#0008;display:none;place-items:center;padding:20px}
+.modal.show{display:grid}
+.dialog{width:min(680px,100%);background:#0c1c21;border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:0 20px 80px #000a}
+.dialog h2{margin:0 0 8px}
+.dialog pre{max-height:300px;overflow:auto;background:#071114;padding:12px;border-radius:8px;color:#ffb6bd;white-space:pre-wrap}
+.dialog .actions{text-align:right;margin-top:12px}
+@media (max-width:820px){.main{grid-template-columns:1fr;grid-template-rows:180px minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="top">
+  <div class="brand">SB3 <span>Project JSON</span> Editor</div>
+  <label class="fileBtn">Open .sb3<input id="picker" type="file" accept=".sb3,.zip,application/zip"></label>
+  <button id="format" disabled>Format</button>
+  <button id="validate" disabled>Validate JSON</button>
+  <button id="save" disabled>Repackage .sb3</button>
+</header>
+<main class="main">
+  <aside class="side">
+    <div class="sideHead"><strong>Archive</strong><span id="fileCount">0 files</span></div>
+    <div class="stats" id="stats">Open an SB3 file to begin.</div>
+    <div class="files" id="files"><div class="empty">Your SB3 stays entirely in this browser.<br><br>Only <b>project.json</b> is editable; all other archive files are preserved when you repackage.</div></div>
+  </aside>
+  <section class="editor">
+    <div class="editorHead">
+      <div class="tabs" role="tablist">
+        <button class="tab active" role="tab" data-tab="json" aria-selected="true">project.json</button>
+        <button class="tab" role="tab" data-tab="pseudo" aria-selected="false">Pseudocode<span class="beta">beta</span></button>
+      </div>
+      <span class="spacer"></span>
+      <span id="jsonStatus" class="status">No project loaded</span>
+    </div>
+    <div class="panes">
+      <div class="pane active" id="paneJson">
+        <div class="wrap"><textarea id="code" class="code" spellcheck="false" disabled placeholder="project.json will appear here..."></textarea></div>
+      </div>
+      <div class="pane" id="panePseudo">
+        <div class="pbar">
+          <label class="stack">Show <select id="tsel" aria-label="Target to show"><option value="__all__">All targets</option></select></label>
+          <label><input type="checkbox" id="optPos" checked> script positions</label>
+          <label><input type="checkbox" id="optIds"> IDs</label>
+          <label><input type="checkbox" id="optMon" checked> monitors</label>
+          <label class="stack">list items shown <input type="number" id="optList" min="0" value="12" title="0 = show every item"></label>
+          <span class="grow"></span>
+          <button id="pRefresh">Decompile again</button>
+          <button id="pCopy" disabled>Copy</button>
+          <button id="pDownload" disabled>Download .txt</button>
+        </div>
+        <textarea id="pseudo" class="code" readonly spellcheck="false" placeholder="Open an SB3 file, then decompile it here. The pseudocode is read-only for now; edit the JSON tab to change the project."></textarea>
+        <details class="diag" id="diag" open>
+          <summary id="diagHead">Nothing decompiled yet</summary>
+          <ul id="diagList"></ul>
+        </details>
+      </div>
+      <div class="drop">Drop an .sb3 file here</div>
+    </div>
+  </section>
+</main>
+<footer class="bottom"><span>SB3 = ZIP archive containing <b>project.json</b> and project assets.</span><span id="dirty"></span><span id="size"></span></footer>
+</div>
+<div class="modal" id="modal"><div class="dialog"><h2 id="modalTitle">Error</h2><pre id="modalText"></pre><div class="actions"><button id="close">Close</button></div></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+//<decompiler>
+/* ======================================================================
+   SB3 -> pseudocode decompiler (pure logic, no DOM access).
+   Input : parsed project.json object
+   Output: { text, targets:[{name,isStage,text,scripts,blocks}], diagnostics:[...] }
+   Format reference: Scratch Wiki "Scratch File Format" + "List of Block Opcodes".
+   ====================================================================== */
+const SB3Decompiler = (() => {
+  'use strict';
+
+  const IDENT  = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  const NUMLIT = /^\s*-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?\s*$/i;
+
+  const q    = s => JSON.stringify(String(s));
+  const ref  = (sigil, n) => sigil + (IDENT.test(String(n)) ? String(n) : q(n));
+  const pad  = d => '  '.repeat(d);
+  const rnd  = n => (typeof n === 'number' ? Math.round(n * 100) / 100 : n);
+  const fld  = (b, k) => (b.fields && b.fields[k]) ? b.fields[k][0] : undefined;
+  const jsonArr = s => {
+    if (Array.isArray(s)) return s;
+    try { const v = JSON.parse(s); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+  };
+  // Declaration values keep JSON type: 45 (number) vs "45" (string).
+  const valueLit = v => {
+    if (v === null || v === undefined) return 'null';
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    if (typeof v === 'string') return q(v);
+    return JSON.stringify(v);
+  };
+
+  /* ---- vocabulary ---------------------------------------------------- */
+  const INFIX = {
+    operator_add:['+','NUM1','NUM2'], operator_subtract:['-','NUM1','NUM2'],
+    operator_multiply:['*','NUM1','NUM2'], operator_divide:['/','NUM1','NUM2'],
+    operator_mod:['mod','NUM1','NUM2'],
+    operator_gt:['>','OPERAND1','OPERAND2'], operator_lt:['<','OPERAND1','OPERAND2'],
+    operator_equals:['==','OPERAND1','OPERAND2'],
+    operator_and:['and','OPERAND1','OPERAND2'], operator_or:['or','OPERAND1','OPERAND2']
+  };
+
+  // {X}=input (falls back to field), {f:X}=field quoted, {w:X}=field bare, {$X}=variable field, {@X}=list field
+  const TEMPLATES = {
+    // motion
+    motion_movesteps:'move({STEPS})', motion_turnright:'turnRight({DEGREES})', motion_turnleft:'turnLeft({DEGREES})',
+    motion_goto:'goTo({TO})', motion_gotoxy:'goToXY({X}, {Y})',
+    motion_glideto:'glideTo({SECS}, {TO})', motion_glidesecstoxy:'glideToXY({SECS}, {X}, {Y})',
+    motion_pointindirection:'pointInDirection({DIRECTION})', motion_pointtowards:'pointTowards({TOWARDS})',
+    motion_changexby:'changeX({DX})', motion_setx:'setX({X})', motion_changeyby:'changeY({DY})', motion_sety:'setY({Y})',
+    motion_ifonedgebounce:'bounceOnEdge()', motion_setrotationstyle:'setRotationStyle({STYLE})',
+    motion_xposition:'xPosition()', motion_yposition:'yPosition()', motion_direction:'direction()',
+    // looks
+    looks_sayforsecs:'sayFor({MESSAGE}, {SECS})', looks_say:'say({MESSAGE})',
+    looks_thinkforsecs:'thinkFor({MESSAGE}, {SECS})', looks_think:'think({MESSAGE})',
+    looks_switchcostumeto:'switchCostume({COSTUME})', looks_nextcostume:'nextCostume()',
+    looks_switchbackdropto:'switchBackdrop({BACKDROP})', looks_switchbackdroptoandwait:'switchBackdropAndWait({BACKDROP})',
+    looks_nextbackdrop:'nextBackdrop()',
+    looks_changesizeby:'changeSize({CHANGE})', looks_setsizeto:'setSize({SIZE})',
+    looks_changeeffectby:'changeEffect({EFFECT}, {CHANGE})', looks_seteffectto:'setEffect({EFFECT}, {VALUE})',
+    looks_cleargraphiceffects:'clearEffects()', looks_show:'show()', looks_hide:'hide()',
+    looks_gotofrontback:'goToLayer({FRONT_BACK})', looks_goforwardbackwardlayers:'goLayers({FORWARD_BACKWARD}, {NUM})',
+    looks_costumenumbername:'costume({NUMBER_NAME})', looks_backdropnumbername:'backdrop({NUMBER_NAME})', looks_size:'size()',
+    // sound
+    sound_playuntildone:'playSoundUntilDone({SOUND_MENU})', sound_play:'startSound({SOUND_MENU})',
+    sound_stopallsounds:'stopAllSounds()', sound_changeeffectby:'changeSoundEffect({EFFECT}, {VALUE})',
+    sound_seteffectto:'setSoundEffect({EFFECT}, {VALUE})', sound_cleareffects:'clearSoundEffects()',
+    sound_changevolumeby:'changeVolume({VOLUME})', sound_setvolumeto:'setVolume({VOLUME})', sound_volume:'volume()',
+    // events
+    event_broadcast:'broadcast({BROADCAST_INPUT})', event_broadcastandwait:'broadcastAndWait({BROADCAST_INPUT})',
+    // control
+    control_wait:'wait({DURATION})', control_wait_until:'waitUntil({CONDITION})', control_stop:'stop({STOP_OPTION})',
+    control_create_clone_of:'createCloneOf({CLONE_OPTION})', control_delete_this_clone:'deleteThisClone()',
+    // sensing
+    sensing_touchingobject:'touching({TOUCHINGOBJECTMENU})', sensing_touchingcolor:'touchingColor({COLOR})',
+    sensing_coloristouchingcolor:'colorTouchingColor({COLOR}, {COLOR2})', sensing_distanceto:'distanceTo({DISTANCETOMENU})',
+    sensing_askandwait:'ask({QUESTION})', sensing_answer:'answer()', sensing_keypressed:'keyPressed({KEY_OPTION})',
+    sensing_mousedown:'mouseDown()', sensing_mousex:'mouseX()', sensing_mousey:'mouseY()',
+    sensing_setdragmode:'setDragMode({DRAG_MODE})', sensing_loudness:'loudness()',
+    sensing_timer:'timer()', sensing_resettimer:'resetTimer()', sensing_of:'propertyOf({PROPERTY}, {OBJECT})',
+    sensing_current:'current({CURRENTMENU})', sensing_dayssince2000:'daysSince2000()',
+    sensing_online:'online()', sensing_username:'username()',
+    // operators
+    operator_not:'not({OPERAND})', operator_random:'random({FROM}, {TO})', operator_join:'join({STRING1}, {STRING2})',
+    operator_letter_of:'letterOf({LETTER}, {STRING})', operator_length:'length({STRING})',
+    operator_contains:'contains({STRING1}, {STRING2})', operator_round:'round({NUM})',
+    // variables and lists
+    data_setvariableto:'{$VARIABLE} = {VALUE}', data_changevariableby:'{$VARIABLE} += {VALUE}',
+    data_showvariable:'showVar({$VARIABLE})', data_hidevariable:'hideVar({$VARIABLE})',
+    data_addtolist:'{@LIST}.add({ITEM})', data_deleteoflist:'{@LIST}.delete({INDEX})',
+    data_deletealloflist:'{@LIST}.clear()', data_insertatlist:'{@LIST}.insert({INDEX}, {ITEM})',
+    data_replaceitemoflist:'{@LIST}.replace({INDEX}, {ITEM})', data_itemoflist:'{@LIST}[{INDEX}]',
+    data_itemnumoflist:'{@LIST}.indexOf({ITEM})', data_lengthoflist:'{@LIST}.length',
+    data_listcontainsitem:'{@LIST}.contains({ITEM})', data_showlist:'showList({@LIST})', data_hidelist:'hideList({@LIST})',
+    // pen extension
+    pen_clear:'pen.clear()', pen_stamp:'pen.stamp()', pen_penDown:'pen.down()', pen_penUp:'pen.up()',
+    pen_setPenColorToColor:'pen.setColor({COLOR})',
+    pen_changePenColorParamBy:'pen.changeParam({COLOR_PARAM}, {VALUE})', pen_setPenColorParamTo:'pen.setParam({COLOR_PARAM}, {VALUE})',
+    pen_changePenSizeBy:'pen.changeSize({SIZE})', pen_setPenSizeTo:'pen.setSize({SIZE})'
+  };
+
+  const HATS = {
+    event_whenflagclicked:'on flag clicked',
+    event_whenkeypressed:'on key {KEY_OPTION}',
+    event_whenthisspriteclicked:'on this sprite clicked',
+    event_whenstageclicked:'on stage clicked',
+    event_whenbackdropswitchesto:'on backdrop switches to {BACKDROP}',
+    event_whengreaterthan:'on ({w:WHENGREATERTHANMENU} > {VALUE})',
+    event_whenbroadcastreceived:'on broadcast {BROADCAST_OPTION}',
+    event_whentouchingobject:'on touching {TOUCHINGOBJECTMENU}',
+    control_start_as_clone:'on clone start'
+  };
+
+  const SPECIAL = new Set(['data_variable','data_listcontents','argument_reporter_string_number',
+    'argument_reporter_boolean','procedures_call','operator_mathop']);
+  const NUMERIC = new Set(['operator_add','operator_subtract','operator_multiply','operator_divide',
+    'operator_mod','operator_gt','operator_lt','operator_round','operator_mathop','operator_random']);
+  const isKnown = op => !!(TEMPLATES[op] || INFIX[op] || SPECIAL.has(op));
+  const isHat = op => !!HATS[op] || (op !== 'procedures_definition' && /(^|_)when/i.test(op));
+
+  /* ---- helpers ------------------------------------------------------- */
+  function isWrapped(e) {
+    if (e[0] !== '(') return false;
+    let depth = 0, inStr = false;
+    for (let i = 0; i < e.length; i++) {
+      const c = e[i];
+      if (inStr) { if (c === '\\') i++; else if (c === '"') inStr = false; continue; }
+      if (c === '"') inStr = true;
+      else if (c === '(') depth++;
+      else if (c === ')') { depth--; if (depth === 0) return i === e.length - 1; }
+    }
+    return false;
+  }
+  const cond = e => (isWrapped(e) ? e : '(' + e + ')');
+
+  function makeCtx(t, opts, diag) {
+    const ctx = {
+      t, opts, blocks: t.blocks || {}, comments: t.comments || {}, script: '',
+      visited: new Set(), usedComments: new Set(), unknownOps: new Set(),
+      calls: new Set(), defs: new Set()
+    };
+    ctx.diag = (level, msg) => diag(level, t.name, ctx.script, msg);
+    return ctx;
+  }
+
+  /* ---- expressions --------------------------------------------------- */
+  function primitive(p, ctx) {
+    const t = p[0];
+    if (t >= 4 && t <= 8) {
+      const v = p[1];
+      if (v === '' || v === null || v === undefined) return '<empty>';
+      return NUMLIT.test(String(v)) ? String(v).trim() : q(v);
+    }
+    if (t === 9)  return String(p[1]);
+    if (t === 10) return q(p[1] === null || p[1] === undefined ? '' : p[1]);
+    if (t === 11) return q(p[1]);
+    if (t === 12) return ref('$', p[1]);
+    if (t === 13) return ref('@', p[1]);
+    ctx.diag('error', 'unknown primitive type ' + t + ': ' + JSON.stringify(p));
+    return 'prim(' + JSON.stringify(p) + ')';
+  }
+
+  // A shadow block that only carries one field is a menu/literal: fold it into a value.
+  function shadowLiteral(b) {
+    const fk = Object.keys(b.fields || {});
+    if (fk.length !== 1 || Object.keys(b.inputs || {}).length) return null;
+    const v = b.fields[fk[0]][0];
+    if (/^math_/.test(b.opcode)) return (v === '' || v === null || v === undefined) ? '<empty>' : (NUMLIT.test(String(v)) ? String(v).trim() : q(v));
+    if (b.opcode === 'colour_picker') return String(v);
+    return q(v === null || v === undefined ? '' : v);
+  }
+
+  function inputExpr(ctx, b, key) {
+    const inp = b.inputs ? b.inputs[key] : undefined;
+    if (!Array.isArray(inp)) {
+      const f = b.fields && b.fields[key];
+      return f ? q(f[0] === null || f[0] === undefined ? '' : f[0]) : '<empty>';
+    }
+    let v = inp[1];
+    if ((v === null || v === undefined) && inp.length > 2) v = inp[2];
+    if (inp[0] === 3 && typeof inp[2] === 'string') ctx.visited.add(inp[2]);   // covered shadow
+    if (v === null || v === undefined) return '<empty>';
+    if (Array.isArray(v)) return primitive(v, ctx);
+    return exprOfId(ctx, v);
+  }
+
+  function exprOfId(ctx, id) {
+    ctx.visited.add(id);
+    const b = ctx.blocks[id];
+    if (b === undefined) { ctx.diag('error', 'reference to missing block ' + id); return '<missing:' + id + '>'; }
+    if (Array.isArray(b)) return primitive(b, ctx);
+    return exprOfBlock(ctx, b);
+  }
+
+  function checkEmptyOperands(ctx, b) {
+    for (const k of Object.keys(b.inputs || {})) {
+      const inp = b.inputs[k];
+      if (!Array.isArray(inp) || inp[0] !== 1 || !Array.isArray(inp[1])) continue;
+      const p = inp[1];
+      if (p[0] >= 4 && p[0] <= 10 && (p[1] === '' || p[1] === null || p[1] === undefined)) {
+        ctx.diag('note', 'empty ' + k + ' slot in ' + b.opcode + ' (blank text used as an operand)');
+      }
+    }
+  }
+
+  function fill(ctx, b, tpl) {
+    return tpl.replace(/\{(f:|w:|\$|@)?([A-Za-z0-9_]+)\}/g, (m, kind, key) => {
+      if (kind === '$') return ref('$', fld(b, key) === undefined ? '' : fld(b, key));
+      if (kind === '@') return ref('@', fld(b, key) === undefined ? '' : fld(b, key));
+      if (kind === 'w:') { const v = fld(b, key); return v === undefined ? '<empty>' : String(v); }
+      if (kind === 'f:') { const v = fld(b, key); return v === undefined ? '<empty>' : q(v === null ? '' : v); }
+      return inputExpr(ctx, b, key);
+    });
+  }
+
+  function generic(ctx, b, skipSub) {
+    if (!ctx.unknownOps.has(b.opcode)) {
+      ctx.unknownOps.add(b.opcode);
+      ctx.diag('note', 'no readable form for opcode ' + b.opcode + '; printed in generic form');
+    }
+    const parts = [];
+    for (const k of Object.keys(b.inputs || {})) {
+      if (skipSub && /^SUBSTACK\d*$/.test(k)) continue;
+      parts.push(k + ': ' + inputExpr(ctx, b, k));
+    }
+    for (const k of Object.keys(b.fields || {})) {
+      const v = fld(b, k);
+      parts.push(k + ' = ' + q(v === null || v === undefined ? '' : v));
+    }
+    if (b.mutation) parts.push('mutation = ' + JSON.stringify(b.mutation));
+    return b.opcode + '(' + parts.join(', ') + ')';
+  }
+
+  function callStmt(ctx, b) {
+    const m = b.mutation || {};
+    const proccode = m.proccode || '';
+    ctx.calls.add(proccode);
+    const args = jsonArr(m.argumentids).map(aid => inputExpr(ctx, b, aid));
+    return 'call ' + q(proccode) + '(' + args.join(', ') + ')';
+  }
+
+  function exprOfBlock(ctx, b) {
+    const op = b.opcode;
+    if (b.shadow) { const l = shadowLiteral(b); if (l !== null) return l; }
+    switch (op) {
+      case 'data_variable':     return ref('$', fld(b, 'VARIABLE') === undefined ? '' : fld(b, 'VARIABLE'));
+      case 'data_listcontents': return ref('@', fld(b, 'LIST') === undefined ? '' : fld(b, 'LIST'));
+      case 'argument_reporter_string_number':
+      case 'argument_reporter_boolean': return ref('%', fld(b, 'VALUE') === undefined ? '' : fld(b, 'VALUE'));
+      case 'procedures_call':   return callStmt(ctx, b);
+      case 'operator_mathop': {
+        checkEmptyOperands(ctx, b);
+        const o = String(fld(b, 'OPERATOR'));
+        const a = inputExpr(ctx, b, 'NUM');
+        return /^[a-z]+$/.test(o) ? o + '(' + a + ')' : 'mathop(' + q(o) + ', ' + a + ')';
+      }
+    }
+    if (NUMERIC.has(op)) checkEmptyOperands(ctx, b);
+    if (INFIX[op]) {
+      const [sym, a, c] = INFIX[op];
+      return '(' + inputExpr(ctx, b, a) + ' ' + sym + ' ' + inputExpr(ctx, b, c) + ')';
+    }
+    if (TEMPLATES[op]) return fill(ctx, b, TEMPLATES[op]);
+    return generic(ctx, b, false);
+  }
+
+  /* ---- statements ---------------------------------------------------- */
+  function emitComment(ctx, b, depth, out) {
+    if (!b.comment) return;
+    const c = ctx.comments[b.comment];
+    if (!c) { ctx.diag('note', 'block refers to missing comment ' + b.comment); return; }
+    ctx.usedComments.add(b.comment);
+    String(c.text === undefined ? '' : c.text).split(/\r?\n/).forEach(line => out.push(pad(depth) + '/// ' + line));
+  }
+
+  function subId(b, k) {
+    const inp = b.inputs && b.inputs[k];
+    return (Array.isArray(inp) && typeof inp[1] === 'string') ? inp[1] : null;
+  }
+
+  function renderStack(ctx, startId, depth, out) {
+    const seen = new Set();
+    let id = startId;
+    while (id) {
+      if (seen.has(id)) { ctx.diag('error', 'cycle in next-chain at ' + id); out.push(pad(depth) + '// ERROR: cycle detected'); break; }
+      seen.add(id);
+      ctx.visited.add(id);
+      const b = ctx.blocks[id];
+      if (b === undefined) { ctx.diag('error', 'missing block ' + id + ' in stack'); out.push(pad(depth) + '// ERROR: missing block ' + id); break; }
+      if (Array.isArray(b)) { out.push(pad(depth) + primitive(b, ctx)); break; }
+      emitComment(ctx, b, depth, out);
+      renderStatement(ctx, b, depth, out);
+      id = b.next;
+    }
+  }
+
+  function renderStatement(ctx, b, depth, out) {
+    const p = pad(depth), op = b.opcode;
+    const open = (head, key) => { out.push(p + head + ' {'); renderStack(ctx, subId(b, key || 'SUBSTACK'), depth + 1, out); };
+    switch (op) {
+      case 'control_forever':      open('forever'); out.push(p + '}'); return;
+      case 'control_repeat':       open('repeat ' + cond(inputExpr(ctx, b, 'TIMES'))); out.push(p + '}'); return;
+      case 'control_repeat_until': open('repeatUntil ' + cond(inputExpr(ctx, b, 'CONDITION'))); out.push(p + '}'); return;
+      case 'control_while':        open('while ' + cond(inputExpr(ctx, b, 'CONDITION'))); out.push(p + '}'); return;
+      case 'control_for_each':
+        open('forEach (' + ref('$', fld(b, 'VARIABLE') === undefined ? '' : fld(b, 'VARIABLE')) + ' in ' + inputExpr(ctx, b, 'VALUE') + ')');
+        out.push(p + '}'); return;
+      case 'control_if':           open('if ' + cond(inputExpr(ctx, b, 'CONDITION'))); out.push(p + '}'); return;
+      case 'control_if_else':
+        open('if ' + cond(inputExpr(ctx, b, 'CONDITION')));
+        out.push(p + '} else {');
+        renderStack(ctx, subId(b, 'SUBSTACK2'), depth + 1, out);
+        out.push(p + '}'); return;
+    }
+    if (!isKnown(op) && b.inputs && (b.inputs.SUBSTACK || b.inputs.SUBSTACK2)) {
+      out.push(p + generic(ctx, b, true) + ' {');
+      renderStack(ctx, subId(b, 'SUBSTACK'), depth + 1, out);
+      if (b.inputs.SUBSTACK2) { out.push(p + '} SUBSTACK2 {'); renderStack(ctx, subId(b, 'SUBSTACK2'), depth + 1, out); }
+      out.push(p + '}'); return;
+    }
+    out.push(p + exprOfBlock(ctx, b));
+  }
+
+  function renderScript(ctx, id, out) {
+    const b = ctx.blocks[id];
+    ctx.visited.add(id);
+    if (Array.isArray(b)) {                       // loose variable/list reporter stored as a primitive
+      const pos = ctx.opts.positions && b.length >= 5 ? '   // @ ' + rnd(b[3]) + ',' + rnd(b[4]) : '';
+      out.push(pad(1) + 'loose ' + primitive(b, ctx) + pos);
+      return;
+    }
+    const pos = ctx.opts.positions && b.x !== undefined ? '   // @ ' + rnd(b.x) + ',' + rnd(b.y) : '';
+    const op = b.opcode;
+
+    if (op === 'procedures_definition') {
+      emitComment(ctx, b, 1, out);
+      const protoId = b.inputs && Array.isArray(b.inputs.custom_block) ? b.inputs.custom_block[1] : null;
+      const proto = protoId ? ctx.blocks[protoId] : null;
+      if (!proto || !proto.mutation) {
+        ctx.script = 'define (broken)';
+        ctx.diag('error', 'definition block ' + id + ' has no prototype');
+        out.push(pad(1) + '// ERROR: definition without prototype'); return;
+      }
+      ctx.visited.add(protoId);
+      const m = proto.mutation;
+      const proccode = m.proccode || '';
+      const names = jsonArr(m.argumentnames);
+      const types = proccode.match(/%[sb]/g) || [];
+      const sig = names.map((n, i) => (IDENT.test(n) ? n : q(n)) + (types[i] === '%b' ? ':bool' : '')).join(', ');
+      const warp = m.warp === true || m.warp === 'true';
+      ctx.defs.add(proccode);
+      ctx.script = 'define ' + proccode;
+      out.push(pad(1) + 'define ' + q(proccode) + '(' + sig + ')' + (warp ? ' warp' : '') + ' {' + pos);
+      renderStack(ctx, b.next, 2, out);
+      out.push(pad(1) + '}');
+      return;
+    }
+
+    if (isHat(op)) {
+      emitComment(ctx, b, 1, out);
+      const head = HATS[op] ? fill(ctx, b, HATS[op]) : 'on ' + generic(ctx, b, false);
+      ctx.script = head;
+      out.push(pad(1) + head + ' {' + pos);
+      renderStack(ctx, b.next, 2, out);
+      out.push(pad(1) + '}');
+      return;
+    }
+
+    ctx.script = 'stack (no hat)';
+    out.push(pad(1) + 'stack {' + pos);
+    renderStack(ctx, id, 2, out);
+    out.push(pad(1) + '}');
+  }
+
+  /* ---- targets ------------------------------------------------------- */
+  function decompileTarget(t, opts, diag) {
+    const ctx = makeCtx(t, opts, diag);
+    const L = [];
+    L.push((t.isStage ? 'stage ' : 'sprite ') + q(t.name) + ' {');
+
+    const P = t.isStage
+      ? ['currentCostume','volume','layerOrder','tempo','videoState','videoTransparency','textToSpeechLanguage']
+      : ['currentCostume','volume','layerOrder','visible','x','y','size','direction','draggable','rotationStyle'];
+    L.push(pad(1) + 'props ' + P.filter(k => k in t).map(k => k + '=' + valueLit(t[k])).join(' '));
+
+    (t.costumes || []).forEach(c => L.push(pad(1) + 'costume ' + q(c.name) + ' file=' + q(c.md5ext || '') +
+      ' format=' + q(c.dataFormat || '') + (c.bitmapResolution !== undefined ? ' res=' + c.bitmapResolution : '') +
+      ' center=(' + c.rotationCenterX + ',' + c.rotationCenterY + ')'));
+    (t.sounds || []).forEach(s => L.push(pad(1) + 'sound ' + q(s.name) + ' file=' + q(s.md5ext || '') +
+      ' rate=' + s.rate + ' samples=' + s.sampleCount));
+
+    for (const id of Object.keys(t.broadcasts || {}))
+      L.push(pad(1) + 'broadcast ' + q(t.broadcasts[id]) + (opts.ids ? ' id=' + q(id) : ''));
+
+    const names = new Map();
+    for (const id of Object.keys(t.variables || {})) {
+      const v = t.variables[id];
+      names.set('$' + v[0], (names.get('$' + v[0]) || 0) + 1);
+      L.push(pad(1) + (v[2] === true ? 'cloud var ' : 'var ') + ref('$', v[0]) + ' = ' + valueLit(v[1]) + (opts.ids ? ' id=' + q(id) : ''));
+    }
+    for (const id of Object.keys(t.lists || {})) {
+      const l = t.lists[id];
+      names.set('@' + l[0], (names.get('@' + l[0]) || 0) + 1);
+      const items = Array.isArray(l[1]) ? l[1] : [];
+      const cap = opts.maxList > 0 ? Math.min(opts.maxList, items.length) : items.length;
+      let body = items.slice(0, cap).map(valueLit).join(', ');
+      if (cap < items.length) body += (cap ? ', ' : '') + '/* +' + (items.length - cap) + ' more, ' + items.length + ' total */';
+      L.push(pad(1) + 'list ' + ref('@', l[0]) + ' = [' + body + ']' + (opts.ids ? ' id=' + q(id) : ''));
+    }
+    for (const [n, c] of names) if (c > 1) ctx.diag('note', 'name ' + n + ' is declared ' + c + ' times in this target');
+
+    const ids = Object.keys(ctx.blocks);
+    const tops = ids.filter(id => Array.isArray(ctx.blocks[id]) || ctx.blocks[id].topLevel === true);
+    const blockCount = ids.filter(id => !Array.isArray(ctx.blocks[id])).length;
+
+    for (const id of tops) { L.push(''); renderScript(ctx, id, L); }
+
+    for (const pc of ctx.calls) if (!ctx.defs.has(pc)) ctx.diag('error', 'call to undefined custom block ' + q(pc));
+    for (const pc of ctx.defs)  if (!ctx.calls.has(pc)) ctx.diag('note', 'custom block is defined but never called: ' + q(pc));
+
+    ctx.script = '';
+    const orphans = ids.filter(id => !ctx.visited.has(id) && !Array.isArray(ctx.blocks[id]) && !ctx.blocks[id].shadow);
+    if (orphans.length) ctx.diag('note', orphans.length + ' block(s) not reachable from any script, e.g. ' + orphans.slice(0, 4).join(', '));
+
+    const loose = Object.keys(ctx.comments).filter(cid => !ctx.usedComments.has(cid));
+    if (loose.length) {
+      L.push('');
+      for (const cid of loose) {
+        const c = ctx.comments[cid];
+        const lines = String(c.text === undefined ? '' : c.text).split(/\r?\n/);
+        lines.forEach((line, i) => L.push(pad(1) + '/// ' + (i === 0
+          ? '[' + (c.blockId ? 'orphaned comment' : 'workspace comment') + ' @ ' + rnd(c.x) + ',' + rnd(c.y) + '] ' : '') + line));
+      }
+    }
+    L.push('}');
+    return { name: t.name, isStage: !!t.isStage, text: L.join('\n'), scripts: tops.length, blocks: blockCount };
+  }
+
+  /* ---- project ------------------------------------------------------- */
+  const LEGEND = [
+    '// SB3 pseudocode (beta)',
+    '//   $name  variable      @name  list      %name  custom-block argument      <empty>  unfilled slot',
+    '//   "text" string        123  number      #rrggbb  colour',
+    '//   (a + b)  infix: + - * / mod < > == and or       not(x)   sin(x) floor(x) ...   random(a, b)',
+    '//   @list[i]  @list.length  @list.add(x)  @list.delete(i)  @list.insert(i, x)  @list.replace(i, x)  @list.clear()',
+    '//   define "proccode"(arg, flag:bool) warp { }      call "proccode"(a, b)',
+    '//   /// text = Scratch comment      // text = decompiler annotation (e.g. "@ x,y" is the script position)'
+  ];
+
+  function decompile(project, options) {
+    if (!project || typeof project !== 'object' || !Array.isArray(project.targets))
+      throw new Error('This does not look like a Scratch 3 project: "targets" array is missing.');
+    const opts = Object.assign({ positions: true, ids: false, monitors: true, maxList: 12, legend: true }, options || {});
+    const diagnostics = [], seen = new Set();
+    const diag = (level, target, script, message) => {
+      const key = level + '|' + target + '|' + script + '|' + message;
+      if (seen.has(key)) return;
+      seen.add(key);
+      diagnostics.push({ level, target, script, message });
+    };
+
+    const targets = project.targets.map(t => decompileTarget(t, opts, diag));
+
+    const stage = project.targets.find(t => t && t.isStage);
+    if (!stage) diag('error', '(project)', '', 'no target has isStage: true');
+    else {
+      const globals = new Set([].concat(Object.values(stage.variables || {}).map(v => '$' + v[0]),
+                                        Object.values(stage.lists || {}).map(l => '@' + l[0])));
+      project.targets.filter(t => !t.isStage).forEach(t => {
+        Object.values(t.variables || {}).forEach(v => { if (globals.has('$' + v[0])) diag('note', t.name, '', 'local variable $' + v[0] + ' shadows a global of the same name (pseudocode references are name-based)'); });
+        Object.values(t.lists || {}).forEach(l => { if (globals.has('@' + l[0])) diag('note', t.name, '', 'local list @' + l[0] + ' shadows a global of the same name'); });
+      });
+    }
+
+    const P = ['project {'];
+    const meta = project.meta || {};
+    if ('semver' in meta) P.push(pad(1) + 'semver = ' + q(meta.semver));
+    if ('vm' in meta)     P.push(pad(1) + 'vm = ' + q(meta.vm));
+    if ('agent' in meta)  P.push(pad(1) + 'agent = ' + q(meta.agent));
+    P.push(pad(1) + 'extensions = ' + JSON.stringify(project.extensions || []));
+    P.push('}');
+
+    let monitorText = '';
+    if (opts.monitors && Array.isArray(project.monitors) && project.monitors.length) {
+      const M = ['monitors {   // runtime values omitted'];
+      project.monitors.forEach(mon => {
+        const o = Object.assign({}, mon); delete o.value;
+        if (!opts.ids && /^data_/.test(mon.opcode)) delete o.id;
+        M.push(pad(1) + JSON.stringify(o));
+      });
+      M.push('}');
+      monitorText = M.join('\n');
+    }
+
+    const parts = [];
+    if (opts.legend) parts.push(LEGEND.join('\n'));
+    parts.push(P.join('\n'));
+    targets.forEach(t => parts.push(t.text));
+    if (monitorText) parts.push(monitorText);
+
+    return { text: parts.join('\n\n') + '\n', targets, diagnostics };
+  }
+
+  return { decompile };
+})();
+//</decompiler>
+</script>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let zip = null, project = null, originalName = 'project.sb3', dirty = false;
+  let tab = 'json', lastResult = null;
+
+  function showError(title, err) {
+    $('modalTitle').textContent = title;
+    $('modalText').textContent = err instanceof Error ? err.message : String(err);
+    $('modal').classList.add('show');
+  }
+  $('close').onclick = () => $('modal').classList.remove('show');
+
+  function fmtBytes(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1024**2) return (n/1024).toFixed(1) + ' KB';
+    return (n/1024**2).toFixed(1) + ' MB';
+  }
+
+  function setDirty(v) {
+    dirty = v;
+    $('dirty').textContent = v ? '● Unsaved JSON changes' : '✓ JSON unchanged';
+    $('dirty').style.color = v ? 'var(--accent)' : 'var(--muted)';
+  }
+
+  function setStatus(text, cls='') {
+    $('jsonStatus').textContent = text;
+    $('jsonStatus').className = 'status ' + cls;
+  }
+
+  async function openFile(file) {
+    if (!file) return;
+    try {
+      if (typeof JSZip === 'undefined') throw new Error('JSZip failed to load. Check your internet connection and reload the page.');
+      originalName = file.name.replace(/\.zip$/i,'.sb3');
+      const bytes = await file.arrayBuffer();
+      zip = await JSZip.loadAsync(bytes);
+      const entry = zip.file('project.json');
+      if (!entry) throw new Error('This archive does not contain a root-level project.json, so it does not look like a normal SB3 file.');
+      const raw = await entry.async('text');
+      try { project = JSON.parse(raw); }
+      catch (e) { throw new Error('project.json contains invalid JSON:\n\n' + e.message); }
+      $('code').disabled = false;
+      $('code').value = JSON.stringify(project, null, 2);
+      $('save').disabled = false; $('format').disabled = false; $('validate').disabled = false;
+      setDirty(false); setStatus('Valid JSON','ok');
+      renderFiles();
+      $('stats').textContent = `${Object.keys(zip.files).length} archive entries • project.json ${fmtBytes(raw.length)}`;
+      $('size').textContent = `${fmtBytes(file.size)} loaded`;
+      lastResult = null;
+      if (tab === 'pseudo') runDecompile();
+    } catch (e) { showError('Could not open SB3', e); }
+  }
+
+  function renderFiles() {
+    const names = Object.keys(zip.files);
+    $('fileCount').textContent = names.length + (names.length === 1 ? ' file' : ' files');
+    const frag = document.createDocumentFragment();
+    for (const name of names) {
+      const b = document.createElement('button');
+      b.className = 'file' + (name === 'project.json' ? ' active' : '');
+      const icon = name === 'project.json' ? '▣' : (zip.files[name].dir ? '▱' : '◇');
+      b.innerHTML = `<span>${icon}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(name)}</span>`;
+      if (!zip.files[name].dir && name !== 'project.json') {
+        zip.files[name].async('uint8array').then(x => { const s=document.createElement('small'); s.textContent=fmtBytes(x.byteLength); b.appendChild(s); }).catch(()=>{});
+      }
+      frag.appendChild(b);
+    }
+    $('files').replaceChildren(frag);
+  }
+  function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function readEditor() {
+    try {
+      const obj = JSON.parse($('code').value);
+      return obj;
+    } catch (e) {
+      setStatus('Invalid JSON','bad');
+      showError('Invalid JSON', e);
+      return null;
+    }
+  }
+
+  $('picker').onchange = e => openFile(e.target.files[0]);
+  $('format').onclick = () => {
+    const obj = readEditor(); if (!obj) return;
+    $('code').value = JSON.stringify(obj, null, 2);
+    setDirty(true); setStatus('Valid JSON','ok');
+  };
+  $('validate').onclick = () => {
+    const obj = readEditor(); if (!obj) return;
+    const warnings = [];
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) warnings.push('Root value is not an object.');
+    if (!Array.isArray(obj.targets)) warnings.push('Missing or invalid "targets" array.');
+    if (Array.isArray(obj.targets) && !obj.targets.some(t => t && t.isStage === true)) warnings.push('No target with isStage: true was found.');
+    if (obj.extensions !== undefined && !Array.isArray(obj.extensions)) warnings.push('"extensions" should be an array when present.');
+    if (obj.monitors !== undefined && !Array.isArray(obj.monitors)) warnings.push('"monitors" should be an array when present.');
+    if (warnings.length) showError('JSON is valid, but has warnings', warnings.join('\n')); else setStatus('Valid Scratch JSON','ok');
+  };
+
+  $('code').addEventListener('input', () => { setDirty(true); setStatus('Edited',''); });
+
+  $('save').onclick = async () => {
+    if (!zip) return;
+    const obj = readEditor(); if (!obj) return;
+    // Replace only project.json. Every other archive entry remains byte-for-byte as read by JSZip.
+    zip.file('project.json', JSON.stringify(obj));
+    try {
+      const out = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(out);
+      const base = originalName.replace(/\.sb3$/i,'');
+      a.download = base + '-edited.sb3';
+      document.body.appendChild(a); a.click(); a.remove();
+      setDirty(false); $('size').textContent = `${fmtBytes(out.size)} generated`;
+      setStatus('Repackaged','ok');
+    } catch (e) { showError('Could not repackage SB3', e); }
+  };
+
+  /* ---------- tabs ---------- */
+  function setTab(t) {
+    tab = t;
+    document.querySelectorAll('.tab').forEach(b => {
+      const on = b.dataset.tab === t;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    $('paneJson').classList.toggle('active', t === 'json');
+    $('panePseudo').classList.toggle('active', t === 'pseudo');
+    if (t === 'pseudo') runDecompile();
+  }
+  document.querySelectorAll('.tab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+
+  /* ---------- decompiler UI ---------- */
+  function currentOptions() {
+    return {
+      positions: $('optPos').checked,
+      ids: $('optIds').checked,
+      monitors: $('optMon').checked,
+      maxList: Math.max(0, parseInt($('optList').value, 10) || 0)
+    };
+  }
+
+  function setDiag(head, items, raw) {
+    $('diagHead').innerHTML = head;
+    const ul = $('diagList');
+    ul.replaceChildren();
+    if (raw) {
+      const pre = document.createElement('pre'); pre.textContent = raw;
+      ul.appendChild(pre); return;
+    }
+    for (const d of items || []) {
+      const li = document.createElement('li');
+      const lv = document.createElement('span'); lv.className = 'lv ' + d.level; lv.textContent = d.level;
+      const msg = document.createElement('span');
+      const where = document.createElement('span'); where.className = 'where';
+      where.textContent = d.target + (d.script ? ' › ' + d.script : '') + ': ';
+      msg.appendChild(where); msg.appendChild(document.createTextNode(d.message));
+      li.appendChild(lv); li.appendChild(msg); ul.appendChild(li);
+    }
+  }
+
+  function runDecompile() {
+    const out = $('pseudo');
+    $('pCopy').disabled = true; $('pDownload').disabled = true;
+    if (!zip) { out.value = ''; setDiag('Open an SB3 file to decompile it.', []); return; }
+    let obj;
+    try { obj = JSON.parse($('code').value); }
+    catch (e) { out.value = ''; setDiag('<b>Cannot decompile:</b> the JSON tab has a syntax error.', [], e.message); return; }
+    try { lastResult = SB3Decompiler.decompile(obj, currentOptions()); }
+    catch (e) { out.value = ''; setDiag('<b>Cannot decompile:</b> ' + escapeHtml(e.message), []); return; }
+
+    const sel = $('tsel'), prev = sel.value;
+    sel.replaceChildren(new Option('All targets', '__all__'));
+    lastResult.targets.forEach((t, i) => sel.appendChild(new Option((t.isStage ? '[stage] ' : '') + t.name + ' (' + t.scripts + ' scripts)', String(i))));
+    sel.value = [...sel.options].some(o => o.value === prev) ? prev : '__all__';
+    showPseudo();
+
+    const d = lastResult.diagnostics;
+    const errs = d.filter(x => x.level === 'error').length, notes = d.length - errs;
+    setDiag(`<b>Diagnostics</b> — ${errs} error${errs === 1 ? '' : 's'}, ${notes} note${notes === 1 ? '' : 's'}`, d);
+  }
+
+  function showPseudo() {
+    if (!lastResult) return;
+    const v = $('tsel').value;
+    $('pseudo').value = v === '__all__' ? lastResult.text : lastResult.targets[+v].text + '\n';
+    $('pseudo').scrollTop = 0;
+    $('pCopy').disabled = false; $('pDownload').disabled = false;
+  }
+
+  $('tsel').onchange = showPseudo;
+  ['optPos','optIds','optMon','optList'].forEach(id => $(id).addEventListener('change', () => { if (tab === 'pseudo') runDecompile(); }));
+  $('pRefresh').onclick = runDecompile;
+
+  $('pCopy').onclick = async () => {
+    const ta = $('pseudo');
+    try { await navigator.clipboard.writeText(ta.value); }
+    catch (e) { ta.focus(); ta.select(); document.execCommand('copy'); ta.setSelectionRange(0, 0); }
+    const b = $('pCopy'); const old = b.textContent; b.textContent = 'Copied'; setTimeout(() => b.textContent = old, 1200);
+  };
+
+  $('pDownload').onclick = () => {
+    const v = $('tsel').value;
+    const base = originalName.replace(/\.sb3$/i, '');
+    const suffix = v === '__all__' ? '' : '-' + lastResult.targets[+v].name.replace(/[^\w.-]+/g, '_');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([$('pseudo').value], { type: 'text/plain' }));
+    a.download = base + suffix + '.pseudo.txt';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  /* ---------- drag and drop ---------- */
+  const panes = document.querySelector('.panes');
+  ['dragenter','dragover'].forEach(ev => panes.addEventListener(ev, e => { e.preventDefault(); document.body.classList.add('dragging'); }));
+  ['dragleave','drop'].forEach(ev => panes.addEventListener(ev, e => { e.preventDefault(); document.body.classList.remove('dragging'); }));
+  panes.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) openFile(f); });
+  window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue=''; } });
+})();
+</script>
+</body>
+</html>
