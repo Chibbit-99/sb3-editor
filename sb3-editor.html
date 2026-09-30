@@ -61,6 +61,29 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .pbar input[type=checkbox]{accent-color:var(--accent)}
 .pbar .grow{margin-right:auto}
 .pbar button{padding:6px 11px;font-size:13px}
+.pnote{flex-basis:100%;font-size:12px;line-height:1.5;color:var(--muted);margin:-2px 0 1px}
+.pnote b{color:var(--accent);font-weight:600}
+.pstate{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
+.pstate.edited{color:var(--warn)}
+.pstate.edited::before{content:"\25cf "}
+.pstate.ok{color:var(--good)}
+.pstate.ok::before{content:"\2713 "}
+
+/* Autocomplete popup. The mirror is a hidden, textarea-shaped copy of the
+   text in which a zero-width marker sits at the caret, so the marker's
+   offset gives the popup its anchor point. */
+#acMirror{position:fixed;visibility:hidden;pointer-events:none;z-index:0;box-sizing:border-box;white-space:pre;overflow:visible}
+.ac{position:fixed;visibility:visible;pointer-events:auto;z-index:900;margin:0;padding:4px;list-style:none;background:#0c2126;border:1px solid #2f646d;border-radius:10px;box-shadow:0 12px 34px #000b;max-height:264px;overflow:auto;min-width:240px;max-width:min(460px,92vw);font:12px/1.4 ui-monospace,Menlo,Consolas,monospace}
+.ac li{display:flex;gap:10px;align-items:baseline;padding:4px 8px;border-radius:6px;white-space:nowrap;cursor:pointer;color:var(--text)}
+.ac li b{font-weight:600;flex:none}
+.ac li b u{text-decoration:none;color:var(--accent);border-bottom:1px solid #35d6c766}
+.ac li i{font-style:normal;color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis}
+.ac li[aria-selected=true]{background:#154049}
+.ac li[aria-selected=true] i{color:#a9cdd1}
+.ac .acfoot{border-top:1px solid var(--line);margin-top:4px;padding:4px 8px 2px;color:var(--muted);font:11px/1.4 system-ui,sans-serif;display:flex;gap:10px}
+button.primary{border-color:var(--accent);color:#041a18;background:linear-gradient(180deg,#4fe3d3,#28b4a7);font-weight:750}
+button.primary:hover{background:#63ece;background:linear-gradient(180deg,#63edde,#31c2b4);border-color:#6ff0e2}
+button.primary:disabled{background:linear-gradient(180deg,#143238,#0e252a);color:var(--text);border-color:#28535a}
 #pseudo{background:#050f12}
 
 /* diagnostics */
@@ -80,7 +103,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .drop{position:absolute;inset:0;z-index:5;display:none;place-items:center;background:#071014e8;border:2px dashed #3e858a;margin:12px;border-radius:10px;font-size:16px;font-weight:700}
 .dragging .drop{display:grid}
 .empty{padding:24px;color:var(--muted);text-align:center}
-.modal{position:fixed;inset:0;background:#0008;display:none;place-items:center;padding:20px}
+.modal{position:fixed;inset:0;z-index:1000;background:#0008;display:none;place-items:center;padding:20px}
 .modal.show{display:grid}
 .dialog{width:min(680px,100%);background:#0c1c21;border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:0 20px 80px #000a}
 .dialog h2{margin:0 0 8px}
@@ -119,17 +142,20 @@ button:disabled{opacity:.45;cursor:not-allowed}
       </div>
       <div class="pane" id="panePseudo">
         <div class="pbar">
-          <label class="stack">Show <select id="tsel" aria-label="Target to show"><option value="__all__">All targets</option></select></label>
+          <label class="stack" title="All targets shows the whole project as one file, and applying it rebuilds all of project.json. Picking a single target shows just that one; applying it rebuilds only that target and leaves the rest of the project untouched.">Editing <select id="tsel" aria-label="Which target to edit"><option value="__all__">All targets (whole project)</option></select></label>
           <label><input type="checkbox" id="optPos" checked> script positions</label>
           <label><input type="checkbox" id="optIds"> IDs</label>
           <label><input type="checkbox" id="optMon" checked> monitors</label>
-          <label class="stack">list items shown <input type="number" id="optList" min="0" value="12" title="0 = show every item"></label>
+          <label class="stack" title="Limits how many list items are printed. Compiling is refused while a list is truncated, because the missing items cannot be recovered — set this to 0 to print every item.">list items shown <input type="number" id="optList" min="0" value="0" title="0 = show every item"></label>
           <span class="grow"></span>
-          <button id="pRefresh">Decompile again</button>
+          <span id="pState" class="pstate"></span>
+          <button id="pCompile" disabled title="Build a new project.json from this text and switch the JSON tab to it. Shortcut: Ctrl+Enter, or Cmd+Enter on a Mac.">Apply to project</button>
+          <button id="pRefresh" title="Throw away the edits in this box and read the pseudocode from the JSON tab again">Discard edits</button>
           <button id="pCopy" disabled>Copy</button>
           <button id="pDownload" disabled>Download .txt</button>
+          <span id="pNote" class="pnote"></span>
         </div>
-        <textarea id="pseudo" class="code" readonly spellcheck="false" placeholder="Open an SB3 file, then decompile it here. The pseudocode is read-only for now; edit the JSON tab to change the project."></textarea>
+        <textarea id="pseudo" class="code" spellcheck="false" placeholder="Open an SB3 file to decompile it here.&#10;&#10;This text is an editable view of the project.json tab, which stays the source of truth. Type to change it, then press Apply to project to write the change into project.json — or Discard edits to snap back to what the JSON says. Ctrl+Enter applies."></textarea>
         <details class="diag" id="diag" open>
           <summary id="diagHead">Nothing decompiled yet</summary>
           <ul id="diagList"></ul>
@@ -141,6 +167,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 </main>
 <footer class="bottom"><span>SB3 = ZIP archive containing <b>project.json</b> and project assets.</span><span id="dirty"></span><span id="size"></span></footer>
 </div>
+<div id="acMirror" aria-hidden="true"></div>
+<ul id="acList" class="ac" role="listbox" hidden></ul>
 <div class="modal" id="modal"><div class="dialog"><h2 id="modalTitle">Error</h2><pre id="modalText"></pre><div class="actions"><button id="close">Close</button></div></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -589,7 +617,12 @@ const SB3Decompiler = (() => {
     '//   (a + b)  infix: + - * / mod < > == and or       not(x)   sin(x) floor(x) ...   random(a, b)',
     '//   @list[i]  @list.length  @list.add(x)  @list.delete(i)  @list.insert(i, x)  @list.replace(i, x)  @list.clear()',
     '//   define "proccode"(arg, flag:bool) warp { }      call "proccode"(a, b)',
-    '//   /// text = Scratch comment      // text = decompiler annotation (e.g. "@ x,y" is the script position)'
+    '//   /// text = Scratch comment      // text = decompiler annotation (e.g. "@ x,y" is the script position)',
+    '//',
+    '//   This text is an editable view of project.json. Type in the box to change it and',
+    '//   press Apply to project (Ctrl+Enter) to write the change into project.json, or',
+    '//   Discard edits to snap back to what the JSON says. Repackage .sb3 saves the file.',
+    '//   While typing, a menu offers every block name this format accepts.'
   ];
 
   function decompile(project, options) {
@@ -646,16 +679,1291 @@ const SB3Decompiler = (() => {
     return { text: parts.join('\n\n') + '\n', targets, diagnostics };
   }
 
-  return { decompile };
+  // The vocabulary is shared with SB3Compiler so the two directions can
+  // never drift apart: every template the decompiler prints, the compiler
+  // can read back.
+  return { decompile, vocab: { TEMPLATES, INFIX, HATS, SPECIAL, NUMERIC } };
 })();
 //</decompiler>
+</script>
+
+<script>
+//<compiler>
+/* ======================================================================
+   SB3 pseudocode -> project.json.  The inverse of the decompiler above.
+   Pure logic, no DOM access. The opcode vocabulary is shared with the
+   decompiler, so the two directions can never drift apart.
+
+   The text this accepts is exactly what the decompiler emits:
+     project { semver = ".."  vm = ".."  agent = ".."  extensions = [..] }
+     sprite "Name" { props k=v ..   costume ..   sound ..   broadcast ..
+                     var $x = ..    list @l = [..]
+                     one or more scripts }
+     monitors { {json} {json} }
+   Statements  forever / repeat / repeatUntil / while / forEach / if-else,
+               define, call, $x = v, $x += v, and any templated block call.
+   Expressions  infix, calls, mathops, $var, @list, @list[i], @list.m(..),
+               %arg, literals, <empty>, and the generic fallback
+               opcode(INPUT: expr, FIELD = "v").
+   Annotations  /// block comment, // @ x,y script position,
+               // anything else (including the legend) is ignored.
+   ====================================================================== */
+const SB3Compiler = (() => {
+  'use strict';
+
+  const { TEMPLATES, INFIX, HATS } = SB3Decompiler.vocab;
+
+  class CompileError extends Error {
+    constructor (line, message) {
+      super('line ' + line + ': ' + message);
+      this.line = line;
+    }
+  }
+
+  /* ---- unique ids ----------------------------------------------------
+     Scratch treats these as opaque, but they travel through XML, CSS
+     selectors and URL paths, so stay on a conservative alphabet. */
+  const ID_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%()*+,-./:;=?@[]^_{|}~';
+  function idFactory () {
+    const used = new Set();
+    return () => {
+      let s;
+      do {
+        s = '';
+        for (let i = 0; i < 20; i++) s += ID_CHARS.charAt((Math.random() * ID_CHARS.length) | 0);
+      } while (used.has(s));
+      used.add(s);
+      return s;
+    };
+  }
+
+  /* ---- argument shapes ------------------------------------------------
+     The decompiler prints droppable inputs and fixed dropdown fields the
+     same way ({X}), so without this map the compiler would rebuild blocks
+     whose values Scratch cannot read. Menu arguments that really are
+     inputs also need the shadow block that holds the value.
+        i = input with a menu shadow   [shadowOpcode, defaultValue]
+        b = input holding a broadcast primitive
+        f = fixed field
+        bf = field whose value is a broadcast name (keeps the broadcast id)
+     Anything unlisted takes its kind from the template placeholder
+     ({X} input, {f:X}/{w:X} field, {$X} variable field, {@X} list field). */
+  const ARGS = {
+    'looks_switchcostumeto.COSTUME': ['i', 'looks_costume', 'costume1'],
+    'looks_switchbackdropto.BACKDROP': ['i', 'looks_backdrops', 'backdrop1'],
+    'looks_switchbackdroptoandwait.BACKDROP': ['i', 'looks_backdrops', 'backdrop1'],
+    'sound_play.SOUND_MENU': ['i', 'sound_sounds_menu', 'pop'],
+    'sound_playuntildone.SOUND_MENU': ['i', 'sound_sounds_menu', 'pop'],
+    'motion_goto.TO': ['i', 'motion_goto_menu', '_mouse_'],
+    'motion_glideto.TO': ['i', 'motion_goto_menu', '_mouse_'],
+    'motion_pointtowards.TOWARDS': ['i', 'motion_pointtowards_menu', '_mouse_'],
+    'sensing_keypressed.KEY_OPTION': ['i', 'sensing_keyoptions', 'space'],
+    'event_whenkeypressed.KEY_OPTION': ['i', 'sensing_keyoptions', 'space'],
+    'sensing_of.OBJECT': ['i', 'sensing_of_object_menu', '_stage_'],
+    'event_broadcast.BROADCAST_INPUT': ['b'],
+    'event_broadcastandwait.BROADCAST_INPUT': ['b'],
+    'sensing_touchingobject.TOUCHINGOBJECTMENU': ['f', null, ''],
+    'event_whentouchingobject.TOUCHINGOBJECTMENU': ['f', null, ''],
+    'sensing_distanceto.DISTANCETOMENU': ['f', null, ''],
+    'sensing_of.PROPERTY': ['f', null, ''],
+    'sensing_current.CURRENTMENU': ['f', null, 'year'],
+    'sensing_setdragmode.DRAG_MODE': ['f', null, 'draggable'],
+    'control_stop.STOP_OPTION': ['f', null, 'all'],
+    'control_create_clone_of.CLONE_OPTION': ['f', null, '_myself_'],
+    'event_whenbroadcastreceived.BROADCAST_OPTION': ['bf'],
+    'event_whenbackdropswitchesto.BACKDROP': ['f', null, ''],
+    'looks_changeeffectby.EFFECT': ['f', null, 'COLOR'],
+    'looks_seteffectto.EFFECT': ['f', null, 'COLOR'],
+    'sound_changeeffectby.EFFECT': ['f', null, 'PITCH'],
+    'sound_seteffectto.EFFECT': ['f', null, 'PITCH'],
+    'looks_gotofrontback.FRONT_BACK': ['f', null, 'front'],
+    'looks_goforwardbackwardlayers.FORWARD_BACKWARD': ['f', null, 'forward'],
+    'looks_costumenumbername.NUMBER_NAME': ['f', null, 'number'],
+    'looks_backdropnumbername.NUMBER_NAME': ['f', null, 'number'],
+    'motion_setrotationstyle.STYLE': ['f', null, 'all around'],
+    'operator_mathop.OPERATOR': ['f', null, 'sqrt'],
+    'pen_changePenColorParamBy.COLOR_PARAM': ['f', null, 'color'],
+    'pen_setPenColorParamTo.COLOR_PARAM': ['f', null, 'color']
+  };
+
+  function resolveArg (opcode, ph) {
+    const o = ARGS[opcode + '.' + ph.name];
+    if (o) {
+      if (o[0] === 'i') return { kind: 'input', shadow: o[1], def: o[2] };
+      if (o[0] === 'b') return { kind: 'broadcast' };
+      if (o[0] === 'bf') return { kind: 'bcastfield' };
+      return { kind: 'field', def: o[2] };
+    }
+    if (ph.kind === 'f' || ph.kind === 'w') return { kind: 'field' };
+    if (ph.kind === '$') return { kind: 'varfield' };
+    if (ph.kind === '@') return { kind: 'listfield' };
+    return { kind: 'input' };
+  }
+
+  /* ---- reverse lookups ------------------------------------------------ */
+  const PH_RE = /\{(f:|w:|\$|@)?([A-Za-z0-9_]+)\}/g;
+  const PH_ONE = /^\{(f:|w:|\$|@)?([A-Za-z0-9_]+)\}$/;
+  const placeholders = tpl => {
+    const out = [];
+    let m; PH_RE.lastIndex = 0;
+    while ((m = PH_RE.exec(tpl)) !== null) out.push({ kind: m[1] || '', name: m[2] });
+    return out;
+  };
+  const CALLEE_RE = /^([A-Za-z_][A-Za-z0-9_.]*)\(/;
+
+  const CALL_BY_NAME = {};
+  Object.keys(TEMPLATES).forEach(op => {
+    const m = CALLEE_RE.exec(TEMPLATES[op]);
+    if (m && CALL_BY_NAME[m[1]] === undefined) CALL_BY_NAME[m[1]] = op;
+  });
+  const INFIX_BY_SYM = {};
+  Object.keys(INFIX).forEach(op => {
+    const s = INFIX[op][0];
+    if (INFIX_BY_SYM[s] === undefined) INFIX_BY_SYM[s] = op;
+  });
+  // indexOf and contains are Boolean reporters; the other list methods are
+  // command blocks even though the VM's show/hide list also return a value.
+  const LIST_REPORTERS = new Set(['indexOf', 'contains']);
+  const MATHOPS = ['abs', 'floor', 'ceiling', 'sqrt', 'sin', 'cos', 'tan',
+    'asin', 'acos', 'atan', 'ln', 'log', 'e ^', '10 ^'];
+  const LIST_METHODS = {
+    add: ['data_addtolist', ['ITEM']], delete: ['data_deleteoflist', ['INDEX']],
+    clear: ['data_deletealloflist', []], insert: ['data_insertatlist', ['INDEX', 'ITEM']],
+    replace: ['data_replaceitemoflist', ['INDEX', 'ITEM']],
+    indexOf: ['data_itemnumoflist', ['ITEM']], contains: ['data_listcontainsitem', ['ITEM']],
+    show: ['data_showlist', []], hide: ['data_hidelist', []]
+  };
+  const HAT_MATCH = Object.keys(HATS).map(op => {
+    const tpl = HATS[op];
+    let re = '^'; const groups = [];
+    tpl.split(/(\{(?:f:|w:|\$|@)?[A-Za-z0-9_]+\})/).forEach(part => {
+      const m = PH_ONE.exec(part);
+      if (m) { re += '(.+?)'; groups.push(m[1] || ''); }
+      else re += part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    });
+    return { op, re: new RegExp(re + '$'), groups, prefix: tpl.split('{')[0].length };
+  }).sort((a, b) => b.prefix - a.prefix);
+
+  const PREC = { or: 1, and: 2, '==': 3, '>': 4, '<': 4, '+': 5, '-': 5, '*': 6, '/': 6, mod: 6 };
+  const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  const rnd2 = n => Math.round(n * 100) / 100;
+  const isIdent = s => IDENT_RE.test(String(s));
+  const FLOAT_RE = /^\[(workspace|orphaned) comment @ (-?[\d.]+),\s*(-?[\d.]+)\]\s?([\s\S]*)$/;
+  const POS_RE = /^@\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)/;
+
+  /* ============================ lexer ============================ */
+  const unquote = raw => { try { return JSON.parse('"' + raw + '"'); } catch (e) { return raw; } };
+
+  function lex (src) {
+    const toks = [];
+    let i = 0, line = 1;
+    const n = src.length;
+    const isIdStart = c => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c === '_';
+    const isId = c => isIdStart(c) || (c >= '0' && c <= '9');
+    const isDig = c => c >= '0' && c <= '9';
+    while (i < n) {
+      const c = src[i];
+      if (c === '\n') { line++; i++; continue; }
+      if (c === ' ' || c === '\t' || c === '\r') { i++; continue; }
+      if (c === '/' && src[i + 1] === '/') {
+        let j = i + 2, triple = false;
+        if (src[j] === '/') { triple = true; j++; }
+        let end = src.indexOf('\n', j);
+        if (end < 0) end = n;
+        toks.push({ k: triple ? 'cmt' : 'anno', text: src.slice(j, end).replace(/^\s+/, ''), line, start: i, end });
+        i = end; continue;
+      }
+      if (c === '"' || c === "'") {
+        let j = i + 1, raw = '';
+        while (j < n && src[j] !== c) {
+          if (src[j] === '\\') { raw += src[j] + (src[j + 1] || ''); j += 2; } else raw += src[j++];
+        }
+        if (j >= n) throw new CompileError(line, 'unterminated string');
+        toks.push({ k: 'str', v: unquote(raw), line, start: i, end: j + 1 });
+        i = j + 1; continue;
+      }
+      if (c === '#') {
+        let j = i + 1;
+        while (j < n && /[0-9a-fA-F]/.test(src[j])) j++;
+        if (j === i + 1) throw new CompileError(line, 'a colour must be written as #rrggbb');
+        toks.push({ k: 'color', v: src.slice(i, j), line, start: i, end: j });
+        i = j; continue;
+      }
+      if (isDig(c) || (c === '.' && isDig(src[i + 1]))) {
+        let j = i;
+        while (j < n && isDig(src[j])) j++;
+        if (src[j] === '.') { j++; while (j < n && isDig(src[j])) j++; }
+        if (src[j] === 'e' || src[j] === 'E') {
+          let k = j + 1;
+          if (src[k] === '+' || src[k] === '-') k++;
+          if (isDig(src[k])) { j = k; while (j < n && isDig(src[j])) j++; }
+        }
+        toks.push({ k: 'num', v: src.slice(i, j), line, start: i, end: j });
+        i = j; continue;
+      }
+      if (isIdStart(c)) {
+        let j = i;
+        while (j < n && isId(src[j])) j++;
+        toks.push({ k: 'ident', v: src.slice(i, j), line, start: i, end: j });
+        i = j; continue;
+      }
+      const two = src.substr(i, 2);
+      if (two === '==' || two === '+=' || two === '!=' || two === '>=' || two === '<=') {
+        toks.push({ k: 'punc', v: two, line, start: i, end: i + 2 }); i += 2; continue;
+      }
+      if ('()[]{},:;=+-*/<>.$@%!'.indexOf(c) >= 0) {
+        toks.push({ k: 'punc', v: c, line, start: i, end: i + 1 }); i++; continue;
+      }
+      throw new CompileError(line, 'unexpected character ' + JSON.stringify(c));
+    }
+    toks.push({ k: 'eof', line, start: n, end: n });
+    return toks;
+  }
+
+  /* ============================ parser ============================ */
+  function makeParser (src) {
+    const toks = lex(src);
+    let p = 0;
+    const peek = (o) => toks[Math.min(p + (o || 0), toks.length - 1)];
+    const describe = t => ({
+      eof: 'end of file', str: 'string ' + JSON.stringify(t.v), num: 'number ' + t.v,
+      cmt: 'comment', anno: 'comment', color: 'colour ' + t.v
+    })[t.k] || ('"' + t.v + '"');
+    const err = (msg, t) => { throw new CompileError((t || peek()).line, msg); };
+    const at = (k, v) => { const t = peek(); return t.k === k && (v === undefined || t.v === v); };
+    const eat = (k, v) => { if (at(k, v)) { p++; return true; } return false; };
+    const expect = (k, v) => { if (!eat(k, v)) err('expected ' + (v || k) + ' but found ' + describe(peek())); };
+    const valueFollows = () => peek().k === 'ident' && peek(1).k === 'punc' && peek(1).v === '=';
+    const coord = () => {
+      const neg = eat('punc', '-');
+      if (peek().k !== 'num') return NaN;
+      const v = Number(peek().v); p++;
+      return neg ? -v : v;
+    };
+
+    function balanced (open, close) {
+      if (!at('punc', open)) err('expected ' + open);
+      const first = p; let depth = 0;
+      while (p < toks.length) {
+        const t = toks[p];
+        if (t.k === 'eof') err('missing ' + close);
+        if (t.k === 'punc' && t.v === open) depth++;
+        else if (t.k === 'punc' && t.v === close) { depth--; if (depth === 0) { p++; break; } }
+        p++;
+      }
+      return { text: src.slice(toks[first].start, toks[p - 1].end), line: toks[first].line };
+    }
+    function takeJSON (open, close, what) {
+      const b = balanced(open, close);
+      try { return JSON.parse(b.text); } catch (e) { throw new CompileError(b.line, what + ' is not valid JSON: ' + e.message); }
+    }
+    const scalar = () => {
+      const t = peek();
+      if (t.k === 'num' || (t.k === 'punc' && t.v === '-' && peek(1).k === 'num')) {
+        const neg = eat('punc', '-');
+        const v = Number(peek().v); p++;
+        return neg ? -v : v;
+      }
+      if (t.k === 'str') { p++; return t.v; }
+      if (t.k === 'punc' && t.v === '[') return takeJSON('[', ']', 'list');
+      if (t.k === 'ident' && (t.v === 'true' || t.v === 'false' || t.v === 'null')) {
+        p++; return t.v === 'true' ? true : t.v === 'false' ? false : null;
+      }
+      return err('expected a value but found ' + describe(t));
+    };
+    const optId = () => {
+      if (at('ident', 'id') && peek(1).k === 'punc' && peek(1).v === '=' && peek(2).k === 'str') {
+        const v = peek(2).v; p += 3; return v;
+      }
+      return undefined;
+    };
+    function named (sigil) {
+      expect('punc', sigil);
+      const t = peek();
+      if (t.k === 'str' || t.k === 'ident') { p++; return String(t.v); }
+      return err('expected a name after ' + sigil);
+    }
+    const position = () => {
+      if (at('anno')) {
+        const m = POS_RE.exec(peek().text);
+        if (m) { p++; return { x: rnd2(Number(m[1])), y: rnd2(Number(m[2])) }; }
+      }
+      return null;
+    };
+    function commentGroup () {
+      const out = [];
+      for (;;) {
+        if (!at('cmt')) break;
+        const t = peek(); p++;
+        const f = FLOAT_RE.exec(t.text);
+        if (f) out.push({ t: 'comment', floating: true, kind: f[1], x: rnd2(Number(f[2])), y: rnd2(Number(f[3])), text: f[4] });
+        else if (out.length && out[out.length - 1].floating) out[out.length - 1].text += '\n' + t.text;
+        else out.push({ t: 'comment', floating: false, text: t.text });
+      }
+      return out;
+    }
+
+    /* ---- expressions ---- */
+    function expr (minPrec) {
+      let left = unary();
+      for (;;) {
+        const t = peek();
+        const op = (t.k === 'punc' || t.k === 'ident') && PREC[t.v] !== undefined ? t.v : null;
+        if (op === null || PREC[op] < (minPrec || 0)) break;
+        p++;
+        left = { t: 'bin', op, l: left, r: expr(PREC[op] + 1) };
+      }
+      return left;
+    }
+    function unary () {
+      if (eat('punc', '-')) {
+        if (peek().k === 'num') { const v = Number(peek().v); p++; return { t: 'num', v: -v }; }
+        return { t: 'neg', e: unary() };
+      }
+      return primary();
+    }
+    function primary () {
+      const t = peek();
+      if (t.k === 'punc' && t.v === '(') { p++; const e = expr(0); expect('punc', ')'); return e; }
+      if (t.k === 'punc' && t.v === '<' && peek(1).k === 'ident' && peek(1).v === 'empty' &&
+          peek(2).k === 'punc' && peek(2).v === '>') { p += 3; return { t: 'empty' }; }
+      if (t.k === 'num') { p++; return { t: 'num', v: Number(t.v) }; }
+      if (t.k === 'str') { p++; return { t: 'str', v: t.v }; }
+      if (t.k === 'color') { p++; return { t: 'color', v: t.v }; }
+      if (t.k === 'punc' && t.v === '$') return { t: 'var', name: named('$') };
+      if (t.k === 'punc' && t.v === '%') return { t: 'arg', name: named('%') };
+      if (t.k === 'punc' && t.v === '@') return listRef();
+      if (t.k === 'ident') return callLike();
+      return err('expected an expression but found ' + describe(t));
+    }
+    function listRef () {
+      const name = named('@');
+      if (eat('punc', '[')) { const i = expr(0); expect('punc', ']'); return { t: 'listIdx', name, i }; }
+      if (eat('punc', '.')) {
+        const m = peek();
+        if (m.k !== 'ident') err('expected a list method after .');
+        p++;
+        if (m.v === 'length') return { t: 'listLen', name };
+        if (!LIST_METHODS[m.v]) err('unknown list method ".' + m.v + '"');
+        expect('punc', '(');
+        const args = [];
+        if (!at('punc', ')')) { args.push(expr(0)); while (eat('punc', ',')) args.push(expr(0)); }
+        expect('punc', ')');
+        return { t: 'listMethod', name, m: m.v, args };
+      }
+      return { t: 'list', name };
+    }
+    function args0 () {
+      expect('punc', '(');
+      const args = [];
+      if (!at('punc', ')')) { args.push(expr(0)); while (eat('punc', ',')) args.push(expr(0)); }
+      expect('punc', ')');
+      return args;
+    }
+    function callLike () {
+      const t = peek();
+      let name = String(t.v);
+      p++;
+      // callee names may be dotted, e.g. pen.clear() for pen_clear
+      while (at('punc', '.') && peek(1).k === 'ident') { name += '.' + String(peek(1).v); p += 2; }
+      if (name === 'call' && at('str')) { const code = String(peek().v); p++; return { t: 'custom', code, args: args0() }; }
+      if (CALL_BY_NAME[name] && at('punc', '(')) return { t: 'call', op: CALL_BY_NAME[name], args: args0() };
+      if (MATHOPS.includes(name) && at('punc', '(')) {
+        expect('punc', '(');
+        const a = expr(0); expect('punc', ')');
+        return { t: 'mathop', op: name, arg: a };
+      }
+      if (at('punc', '(')) {
+        // a generic form always starts "NAME:" or "NAME ="
+        const ok = peek(1).k === 'ident' && peek(2).k === 'punc' && (peek(2).v === ':' || peek(2).v === '=');
+        if (ok) return genericCall(name);
+      }
+      return err('"' + name + '" is not a known block. Expected a call such as move(10), ' +
+        'or a generic form such as some_extension_block(INPUT: 1).');
+    }
+    function genericCall (op) {
+      expect('punc', '(');
+      const inputs = [], fields = [];
+      if (!at('punc', ')')) {
+        for (;;) {
+          const key = peek();
+          if (key.k !== 'ident') err('expected an input or field name inside ' + op + '()');
+          p++;
+          if (eat('punc', ':')) inputs.push({ name: key.v, e: expr(0) });
+          else if (eat('punc', '=')) fields.push({ name: key.v, e: expr(0) });
+          else err('expected ":" or "=" after ' + key.v);
+          if (!eat('punc', ',')) break;
+        }
+      }
+      expect('punc', ')');
+      return { t: 'generic', op, inputs, fields };
+    }
+
+    /* ---- statements ---- */
+    function statement () {
+      if (at('punc', '$')) {
+        const name = named('$');
+        if (at('punc', '=') || at('punc', '+=')) { const how = peek().v; p++; return { t: 'assign', name, how, value: expr(0) }; }
+        return err('expected = or += after $' + name);
+      }
+      if (at('ident')) {
+        const kw = String(peek().v);
+        if (kw === 'loose') { p++; const name = named('$'); return { t: 'loose', name, pos: position() }; }
+        if (kw === 'forever' || kw === 'repeat' || kw === 'repeatUntil' ||
+            kw === 'while' || kw === 'forEach' || kw === 'if') return control(kw);
+        if (kw === 'define') return definition();
+        if (kw === 'on' || kw === 'stack') return script();
+      }
+      return { t: 'exprstmt', e: expr(0) };
+    }
+    function bodyRest () {
+      const out = [];
+      for (;;) {
+        while (at('anno')) p++;
+        while (at('cmt')) out.push.apply(out, commentGroup());
+        while (at('anno')) p++;
+        if (at('punc', '}')) break;
+        if (at('eof')) err('missing }');
+        out.push(statement());
+      }
+      expect('punc', '}');
+      return out;
+    }
+    // A script's "// @ x,y" sits after the opening brace, so the brace and
+    // the body are consumed separately.
+    function body () { expect('punc', '{'); return bodyRest(); }
+    function bodyAt (posHolder) {
+      expect('punc', '{');
+      posHolder.pos = position();
+      return bodyRest();
+    }
+    function control (kw) {
+      p++;
+      if (kw === 'forEach') {
+        expect('punc', '(');
+        const name = named('$');
+        if (eat('ident', 'in')) { } else err('expected "in"');
+        const value = expr(0);
+        expect('punc', ')');
+        const st = {};
+        const b = bodyAt(st);
+        return { t: 'forEach', name, value, pos: st.pos, body: b };
+      }
+      if (kw === 'if') {
+        expect('punc', '(');
+        const cond = expr(0);
+        expect('punc', ')');
+        const st = {};
+        const a = bodyAt(st);
+        let b = null;
+        if (eat('ident', 'else')) b = body();
+        return { t: 'if', cond, pos: st.pos, body: a, elseBody: b };
+      }
+      const st = {};
+      let arg = null;
+      if (kw !== 'forever') {
+        expect('punc', '(');
+        arg = expr(0);
+        expect('punc', ')');
+      }
+      const b = bodyAt(st);
+      return { t: kw, arg, pos: st.pos, body: b };
+    }
+    function definition () {
+      p++;
+      if (!at('str')) err('a define must start with the block name, e.g. define "go %s"(x) { }');
+      const code = String(peek().v); p++;
+      expect('punc', '(');
+      const params = [];
+      if (!at('punc', ')')) {
+        for (;;) {
+          const t = peek();
+          if (t.k !== 'ident' && t.k !== 'str') err('expected a parameter name');
+          p++;
+          let nm = String(t.v);
+          if (nm.slice(-5) === ':bool') nm = nm.slice(0, -5);
+          // the decompiler writes a boolean argument as  name:bool
+          if (at('punc', ':') && peek(1).k === 'ident' && peek(1).v === 'bool') p += 2;
+          params.push(nm);
+          if (!eat('punc', ',')) break;
+        }
+      }
+      expect('punc', ')');
+      const warp = eat('ident', 'warp');
+      const st = {};
+      const b = bodyAt(st);
+      return { t: 'define', code, params, warp, pos: st.pos, body: b };
+    }
+    function script () {
+      const cmts = [];
+      while (at('cmt')) cmts.push.apply(cmts, commentGroup());
+      if (at('ident', 'define')) { const d = definition(); d.cmts = cmts; return d; }
+      if (eat('ident', 'stack')) { const st = {}; const b = bodyAt(st); return { t: 'stack', cmts, pos: st.pos, body: b }; }
+      let depth = 0, j = p;
+      for (;;) {
+        const t = toks[j];
+        if (t.k === 'eof') err('a hat block must be followed by {');
+        if (t.k === 'punc' && t.v === '(') depth++;
+        else if (t.k === 'punc' && t.v === ')') depth--;
+        else if (t.k === 'punc' && t.v === '{' && depth === 0) break;
+        j++;
+      }
+      const header = src.slice(toks[p].start, toks[j - 1].end).trim();
+      for (const h of HAT_MATCH) {
+        const m = h.re.exec(header);
+        if (!m) continue;
+        p = j;
+        const args = h.groups.map((g, i) => g === 'w:'
+          ? { kind: 'field', text: m[i + 1].trim() }
+          : { kind: 'expr', e: fragment(m[i + 1], toks[p].line) });
+        const st = {};
+        const b = bodyAt(st);
+        return { t: 'hat', op: h.op, args, cmts, pos: st.pos, body: b };
+      }
+      throw new CompileError(toks[p].line, 'unrecognised script header ' + JSON.stringify(header));
+    }
+    function fragment (text, line) {
+      const sub = makeParser(text);
+      const e = sub.expr(0);
+      if (!sub.at('eof')) throw new CompileError(line, 'unexpected text in ' + JSON.stringify(text));
+      return e;
+    }
+
+    /* ---- document ---- */
+    function document () {
+      const doc = { meta: {}, extensions: [], targets: [], monitors: [] };
+      while (!at('eof')) {
+        if (at('anno') || at('cmt')) { p++; continue; }
+        if (at('ident', 'project')) {
+          p++; expect('punc', '{');
+          while (!at('punc', '}')) {
+            if (at('eof')) err('missing } in the project block');
+            if (at('anno')) { p++; continue; }
+            const key = peek();
+            if (key.k !== 'ident') err('expected a project setting');
+            p++; expect('punc', '=');
+            if (key.v === 'extensions') doc.extensions = takeJSON('[', ']', 'extensions');
+            else if (at('punc', '[')) doc.meta[key.v] = takeJSON('[', ']', key.v);
+            else doc.meta[key.v] = scalar();
+          }
+          expect('punc', '}'); continue;
+        }
+        if (at('ident', 'monitors')) {
+          p++; expect('punc', '{');
+          while (!at('punc', '}')) {
+            if (at('eof')) err('missing } in the monitors block');
+            if (at('anno')) { p++; continue; }
+            doc.monitors.push(takeJSON('{', '}', 'monitor'));
+          }
+          expect('punc', '}'); continue;
+        }
+        if (at('ident', 'stage') || at('ident', 'sprite')) { doc.targets.push(target()); continue; }
+        err('expected stage, sprite, project or monitors but found ' + describe(peek()));
+      }
+      return doc;
+    }
+    function target () {
+      const isStage = String(peek().v) === 'stage';
+      p++;
+      if (!at('str')) err('expected a quoted target name');
+      const t = { isStage, name: String(peek().v), props: {}, costumes: [], sounds: [],
+        broadcasts: [], variables: [], lists: [], scripts: [], floaters: [] };
+      p++;
+      expect('punc', '{');
+      for (;;) {
+        if (at('punc', '}')) break;
+        if (at('eof')) err('missing } in target "' + t.name + '"');
+        if (at('anno')) { p++; continue; }
+        const tok = peek();
+        if (tok.k === 'cmt') {
+          // Comments belong to the script that follows them; anything
+          // else (including the decompiler's trailing workspace comments)
+          // stands on its own.
+          const save = p;
+          const group = commentGroup();
+          const nextTok = peek();
+          if (nextTok.k === 'ident' && (nextTok.v === 'on' || nextTok.v === 'stack' || nextTok.v === 'define')) {
+            p = save;
+            t.scripts.push(script());
+          } else t.floaters.push.apply(t.floaters, group);
+          continue;
+        }
+        if (tok.k !== 'ident') err('unexpected ' + describe(tok) + ' in target "' + t.name + '"');
+        const kw = String(tok.v);
+        if (kw === 'props') { p++; while (valueFollows()) { const k = String(peek().v); p += 2; t.props[k] = scalar(); } }
+        else if (kw === 'costume') { p++; t.costumes.push(asset(true)); }
+        else if (kw === 'sound') { p++; t.sounds.push(asset(false)); }
+        else if (kw === 'broadcast') { p++; const name = String(mustName()); t.broadcasts.push({ name, id: optId() }); }
+        else if (kw === 'cloud') { p++; expect('ident', 'var'); t.variables.push(variable(true)); }
+        else if (kw === 'var') { p++; t.variables.push(variable(false)); }
+        else if (kw === 'list') { p++; t.lists.push(list()); }
+        else if (kw === 'loose') { p++; const name = named('$'); t.scripts.push({ t: 'loose', name, pos: position() }); }
+        else if (kw === 'on' || kw === 'stack' || kw === 'define') t.scripts.push(script());
+        else err('unexpected "' + kw + '" in target "' + t.name +
+          '". At the top level of a target you can have props, costume, sound, broadcast,' +
+          ' var, list, a script (on ... / stack ... / define ...), or a loose variable.');
+      }
+      expect('punc', '}');
+      return t;
+    }
+    function mustName () {
+      const t = peek();
+      if (t.k === 'str' || t.k === 'ident') { p++; return t.v; }
+      return err('expected a quoted name but found ' + describe(t));
+    }
+    function asset (isCostume) {
+      const a = { name: String(mustName()) };
+      const got = {};
+      let centre = null;
+      while (valueFollows()) {
+        const k = String(peek().v); p += 2;
+        if (isCostume && k === 'center') {
+          expect('punc', '(');
+          const x = coord();
+          expect('punc', ',');
+          const y = coord();
+          expect('punc', ')');
+          centre = { x, y };
+        } else got[k] = scalar();
+      }
+      // the decompiler prints file=/format=/res=/rate=/samples=
+      a.md5ext = got.file === undefined ? '' : String(got.file);
+      a.assetId = a.md5ext.replace(/\.[^.]+$/, '');
+      a.dataFormat = got.format === undefined ? (a.md5ext.split('.').pop() || 'svg') : String(got.format);
+      if (got.res !== undefined) a.bitmapResolution = got.res;
+      if (got.rate !== undefined) a.rate = got.rate;
+      if (got.samples !== undefined) a.sampleCount = got.samples;
+      if (isCostume && centre && Number.isFinite(centre.x) && Number.isFinite(centre.y)) {
+        a.rotationCenterX = centre.x; a.rotationCenterY = centre.y;
+      }
+      return a;
+    }
+    function variable (cloud) {
+      const name = named('$');
+      expect('punc', '=');
+      return { name, value: scalar(), cloud, id: optId() };
+    }
+    function list () {
+      const name = named('@');
+      expect('punc', '=');
+      if (at('punc', '[') && /\/\*/.test(peek().start !== undefined ? '' : '')) { /* unreachable */ }
+      const b = balanced('[', ']');
+      if (b.text.indexOf('/*') >= 0) {
+        const m = /(\d+)\s+more,\s*(\d+)\s+total/.exec(b.text);
+        throw new CompileError(b.line, 'list @' + name + ' was decompiled with a limit, so its contents are ' +
+          (m ? 'missing ' + m[1] + ' of ' + m[2] + ' items' : 'incomplete') +
+          '. Set "list items shown" to 0, decompile again, then compile.');
+      }
+      let items;
+      try { items = JSON.parse(b.text); } catch (e) { throw new CompileError(b.line, 'list @' + name + ' is not valid JSON: ' + e.message); }
+      if (!Array.isArray(items)) throw new CompileError(b.line, 'list @' + name + ' must be a [...] array');
+      return { name, items, id: optId() };
+    }
+
+    return { document, expr, peek, at, err, describe };
+  }
+
+  /* ============================ codegen ============================ */
+  const STAGE_PROPS = { tempo: 60, videoState: 'on', videoTransparency: 50, textToSpeechLanguage: null };
+  const SPRITE_PROPS = { visible: true, x: 0, y: 0, size: 100, direction: 90, draggable: false, rotationStyle: 'all around' };
+
+  /* text             the pseudocode to build
+     options.context  when one target is edited on its own, the rest of the
+                      project. Its names stay resolvable but are not rebuilt. */
+  function compile (text, options) {
+    const opts = options || {};
+    const context = opts.context || null;
+    const diagnostics = [];
+    const seen = new Set();
+    const add = (level, target, script, message) => {
+      const key = level + '|' + target + '|' + script + '|' + message;
+      if (seen.has(key)) return;
+      seen.add(key);
+      diagnostics.push({ level, target, script, message });
+    };
+    const fail = message => ({ json: null, fatal: true, diagnostics: [{ level: 'error', target: '(pseudocode)', script: '', message }] });
+
+    let doc;
+    try {
+      doc = makeParser(String(text == null ? '' : text)).document();
+    } catch (e) {
+      if (e instanceof CompileError) return fail(e.message);
+      return fail('could not read the pseudocode: ' + (e && e.message ? e.message : String(e)));
+    }
+    if (!doc.targets.length) {
+      return fail(context
+        ? 'this target has no scripts. Switch the target back to "All targets" to edit the whole project.'
+        : 'no targets found. A project needs at least: stage "Stage" { }');
+    }
+    const stages = doc.targets.filter(t => t.isStage);
+    if (stages.length > 1) {
+      return fail('more than one target is marked as the stage: ' + stages.map(t => t.name).join(', '));
+    }
+    if (!stages.length && !context) {
+      // With a context, the target being edited is one of many, so it is a
+      // sprite and carries no stage line of its own.
+      return fail('no target is the stage. One target must start with: stage "Stage" {');
+    }
+
+    const uid = idFactory();
+    const meta = doc.meta;
+    const project = {
+      targets: [], monitors: [], extensions: Array.isArray(doc.extensions) ? doc.extensions : [],
+      meta: {
+        semver: meta.semver === undefined ? '3.0.0' : String(meta.semver),
+        vm: meta.vm === undefined ? '' : String(meta.vm),
+        agent: meta.agent === undefined ? '' : String(meta.agent)
+      }
+    };
+    if (meta.origin !== undefined) project.meta.origin = String(meta.origin);
+
+    /* --- pass 1: targets, declarations, symbol tables --- */
+    const built = doc.targets.map((t, index) => {
+      const jt = { isStage: t.isStage, name: t.name, variables: {}, lists: {}, broadcasts: {},
+        blocks: {}, comments: {}, costumes: [], sounds: [] };
+      const ctx = {
+        jt, t, uid, add, script: '',
+        vars: new Map(), lists: new Map(), bcasts: new Map(), procs: new Map(), procStack: []
+      };
+      ctx.note = (msg) => add('note', t.name, ctx.script, msg);
+      ctx.problem = (msg) => add('error', t.name, ctx.script, msg);
+
+      for (const v of t.variables) {
+        const id = v.id || uid();
+        if (ctx.vars.has(v.name)) ctx.note('variable $' + v.name + ' is declared more than once; the later value wins');
+        ctx.vars.set(v.name, id);
+        jt.variables[id] = v.cloud ? [v.name, v.value, true] : [v.name, v.value];
+      }
+      for (const l of t.lists) {
+        const id = l.id || uid();
+        if (ctx.lists.has(l.name)) ctx.note('list @' + l.name + ' is declared more than once; the later value wins');
+        ctx.lists.set(l.name, id);
+        jt.lists[id] = [l.name, l.items];
+      }
+      for (const b of t.broadcasts) {
+        const id = b.id || uid();
+        if (!ctx.bcasts.has(b.name)) ctx.bcasts.set(b.name, id);
+        jt.broadcasts[id] = b.name;
+      }
+      t.costumes.forEach(c => {
+        const cst = { name: c.name, assetId: c.assetId, dataFormat: c.dataFormat, md5ext: c.md5ext };
+        if (c.bitmapResolution !== undefined) cst.bitmapResolution = c.bitmapResolution;
+        if (c.rotationCenterX !== undefined) cst.rotationCenterX = c.rotationCenterX;
+        if (c.rotationCenterY !== undefined) cst.rotationCenterY = c.rotationCenterY;
+        jt.costumes.push(cst);
+      });
+      t.sounds.forEach(s => {
+        const snd = { name: s.name, assetId: s.assetId, dataFormat: s.dataFormat, md5ext: s.md5ext };
+        if (s.rate !== undefined) snd.rate = s.rate;
+        if (s.sampleCount !== undefined) snd.sampleCount = s.sampleCount;
+        jt.sounds.push(snd);
+      });
+      return { t, jt, ctx, index };
+    });
+
+    const stageBuilt = built.find(b => b.t.isStage);
+    const allVars = new Map(); const allLists = new Map();
+    built.forEach(b => {
+      b.ctx.vars.forEach((id, name) => { if (!allVars.has(name)) allVars.set(name, id); });
+      b.ctx.lists.forEach((id, name) => { if (!allLists.has(name)) allLists.set(name, id); });
+    });
+    // Editing one target on its own: the rest of the project is read-only
+    // context. Its globals stay resolvable, but nothing is rebuilt from it.
+    if (context) {
+      const stage = (context.targets || []).filter(t => t && t.isStage)[0];
+      if (stage) {
+        Object.keys(stage.variables || {}).forEach(id => {
+          const nm = stage.variables[id][0];
+          if (!allVars.has(nm)) allVars.set(nm, id);
+        });
+        Object.keys(stage.lists || {}).forEach(id => {
+          const nm = stage.lists[id][0];
+          if (!allLists.has(nm)) allLists.set(nm, id);
+        });
+      }
+    }
+    // A new global has to live on a stage. When the stage is not part of this
+    // edit there is nowhere to put it, so it stays unrecorded but resolvable.
+    const ghost = () => (stageBuilt ? stageBuilt.jt : { variables: {}, lists: {}, broadcasts: {} });
+
+    // A name resolves to the target's own copy, otherwise the global one,
+    // otherwise a global is created for it (which is what Scratch does).
+    function varId (b, name) {
+      if (b.ctx.vars.has(name)) return b.ctx.vars.get(name);
+      if (allVars.has(name)) return allVars.get(name);
+      const id = uid();
+      allVars.set(name, id);
+      ghost().variables[id] = [name, 0];
+      b.ctx.note('$' + name + ' was never declared; created it as a global variable on the stage');
+      return id;
+    }
+    function listId (b, name) {
+      if (b.ctx.lists.has(name)) return b.ctx.lists.get(name);
+      if (allLists.has(name)) return allLists.get(name);
+      const id = uid();
+      allLists.set(name, id);
+      ghost().lists[id] = [name, []];
+      b.ctx.note('@' + name + ' was never declared; created it as a global list on the stage');
+      return id;
+    }
+    function bcastId (b, name) {
+      if (b.ctx.bcasts.has(name)) return b.ctx.bcasts.get(name);
+      const found = built.find(x => x.ctx.bcasts.has(name));
+      if (found) return found.ctx.bcasts.get(name);
+      if (context) {
+        for (const t of context.targets || []) {
+          const id = Object.keys(t.broadcasts || {}).find(k => t.broadcasts[k] === name);
+          if (id !== undefined) return id;
+        }
+      }
+      const id = uid();
+      const g = ghost();
+      g.broadcasts[id] = name;
+      b.ctx.bcasts.set(name, id);
+      b.ctx.note('broadcast "' + name + '" was never declared; created it on the stage');
+      return id;
+    }
+
+    /* --- block construction --- */
+    const newBlock = (ctx, opcode, parent) => {
+      const id = ctx.uid();
+      ctx.jt.blocks[id] = { opcode, next: null, parent: parent === undefined ? null : parent, inputs: {}, fields: {}, shadow: false, topLevel: false };
+      return id;
+    };
+    // A field (or a menu shadow) holds a fixed value, never a reporter.
+    const constValue = (b, node, what) => {
+      if (node.t === 'str' || node.t === 'num' || node.t === 'color') return node.v;
+      if (node.t === 'ident') return node.v;
+      if (node.t === 'empty') return '';
+      b.ctx.problem('the ' + what + ' of this block needs a fixed value, not a reporter');
+      return '';
+    };
+    const inlinePrim = (b, node) => {
+      if (node.t === 'num') return [4, String(node.v)];
+      if (node.t === 'str') return [10, node.v];
+      if (node.t === 'color') return [9, node.v];
+      if (node.t === 'empty') return [4, ''];
+      if (node.t === 'var') return [12, node.name, varId(b, node.name)];
+      if (node.t === 'list') return [13, node.name, listId(b, node.name)];
+      return null;
+    };
+    const shadowBlock = (b, host, opcode, field, value) => {
+      const id = b.ctx.uid();
+      b.ctx.jt.blocks[id] = { opcode, next: null, parent: host, inputs: {}, fields: {}, shadow: true, topLevel: false };
+      b.ctx.jt.blocks[id].fields[field] = [value, null];
+      return id;
+    };
+
+    function putValue (b, blockId, opcode, ph, node) {
+      const block = b.ctx.jt.blocks[blockId];
+      const spec = resolveArg(opcode, ph);
+      const name = ph.name;
+      if (spec.kind === 'varfield') { block.fields[name] = [node.name, varId(b, node.name)]; return; }
+      if (spec.kind === 'listfield') { block.fields[name] = [node.name, listId(b, node.name)]; return; }
+      if (spec.kind === 'field') { block.fields[name] = [constValue(b, node, name), null]; return; }
+      if (spec.kind === 'broadcast') {
+        const v = String(constValue(b, node, name));
+        block.inputs[name] = [1, [11, v, bcastId(b, v)]];
+        return;
+      }
+      if (spec.kind === 'bcastfield') {
+        const v = String(constValue(b, node, name));
+        block.fields[name] = [v, bcastId(b, v)];
+        return;
+      }
+      if (spec.kind === 'input' && spec.shadow) {
+        const inline = inlinePrim(b, node);
+        if (inline !== null) { block.inputs[name] = [1, shadowBlock(b, blockId, spec.shadow, name, constValue(b, node, name))]; return; }
+        const reporter = buildExpr(b, node, blockId);
+        block.inputs[name] = [3, reporter, shadowBlock(b, blockId, spec.shadow, name, spec.def)];
+        return;
+      }
+      const inline = inlinePrim(b, node);
+      if (inline !== null) { block.inputs[name] = [1, inline]; return; }
+      block.inputs[name] = [2, buildExpr(b, node, blockId)];
+    }
+
+    function buildExpr (b, node, parent) {
+      const ctx = b.ctx;
+      switch (node.t) {
+        case 'num': case 'str': case 'color': case 'empty': case 'var': case 'list': {
+          const prim = inlinePrim(b, node);
+          const opc = node.t === 'num' || node.t === 'empty' ? 'math_number'
+            : node.t === 'str' ? 'text' : node.t === 'color' ? 'colour_picker'
+              : node.t === 'var' ? 'data_variable' : 'data_listcontents';
+          const field = node.t === 'var' ? 'VARIABLE' : node.t === 'list' ? 'LIST' : (opc === 'colour_picker' ? 'COLOUR' : opc === 'text' ? 'TEXT' : 'NUM');
+          const id = newBlock(ctx, opc, parent);
+          ctx.jt.blocks[id].fields[field] = [prim[1], prim[2] === undefined ? null : prim[2]];
+          ctx.jt.blocks[id].shadow = true;
+          return id;
+        }
+        case 'neg': {
+          const id = newBlock(ctx, 'operator_multiply', parent);
+          ctx.jt.blocks[id].inputs.NUM1 = [1, [4, '-1']];
+          ctx.jt.blocks[id].inputs.NUM2 = [2, buildExpr(b, node.e, id)];
+          return id;
+        }
+        case 'bin': {
+          const op = INFIX_BY_SYM[node.op];
+          if (!op) { ctx.problem('unknown operator "' + node.op + '"'); return newBlock(ctx, 'operator_add', parent); }
+          const id = newBlock(ctx, op, parent);
+          const [sym, a, c] = INFIX[op];
+          void sym;
+          putValue(b, id, op, { kind: '', name: a }, node.l);
+          putValue(b, id, op, { kind: '', name: c }, node.r);
+          return id;
+        }
+        case 'mathop': {
+          const id = newBlock(ctx, 'operator_mathop', parent);
+          ctx.jt.blocks[id].fields.OPERATOR = [node.op, null];
+          const inline = inlinePrim(b, node.arg);
+          ctx.jt.blocks[id].inputs.NUM = inline !== null ? [1, inline] : [3, buildExpr(b, node.arg, id), [4, '90']];
+          return id;
+        }
+        case 'listIdx': {
+          const id = newBlock(ctx, 'data_itemoflist', parent);
+          ctx.jt.blocks[id].fields.LIST = [node.name, listId(b, node.name)];
+          putValue(b, id, 'data_itemoflist', { kind: '', name: 'INDEX' }, node.i);
+          return id;
+        }
+        case 'listLen': {
+          const id = newBlock(ctx, 'data_lengthoflist', parent);
+          ctx.jt.blocks[id].fields.LIST = [node.name, listId(b, node.name)];
+          return id;
+        }
+        case 'listMethod': return listMethodBlock(b, node, parent);
+        case 'arg': {
+          const frame = ctx.procStack[ctx.procStack.length - 1];
+          const p = frame && frame.params.find(x => x.name === node.name);
+          if (!p) {
+            ctx.problem('%' + node.name + ' is not a parameter of this custom block');
+            return newBlock(ctx, 'argument_reporter_string_number', parent);
+          }
+          const id = newBlock(ctx, p.bool ? 'argument_reporter_boolean' : 'argument_reporter_string_number', parent);
+          ctx.jt.blocks[id].fields.VALUE = [p.name, null];
+          return id;
+        }
+        case 'call': return callBlock(b, node, parent);
+        case 'custom': {
+          const pr = ctx.procs.get(node.code);
+          if (!pr) {
+            ctx.problem('call to undefined custom block ' + JSON.stringify(node.code) +
+              ' — is there a matching "define" in this target?');
+            return newBlock(ctx, 'procedures_call', parent);
+          }
+          if (node.args.length !== pr.params.length) {
+            ctx.note('call to ' + JSON.stringify(node.code) + ' passes ' + node.args.length +
+              ' argument(s) but the block takes ' + pr.params.length);
+          }
+          const id = newBlock(ctx, 'procedures_call', parent);
+          pr.params.forEach((prm, i) => {
+            if (i < node.args.length) putValue(b, id, 'procedures_call', { kind: '', name: prm.id }, node.args[i]);
+          });
+          ctx.jt.blocks[id].mutation = {
+            tagName: 'mutation', children: [], proccode: node.code,
+            argumentids: JSON.stringify(pr.params.map(x => x.id)), warp: pr.warp ? 'true' : 'false'
+          };
+          return id;
+        }
+        case 'generic': {
+          const id = newBlock(ctx, node.op, parent);
+          node.inputs.forEach(i => putValue(b, id, node.op, { kind: '', name: i.name }, i.e));
+          node.fields.forEach(f => { ctx.jt.blocks[id].fields[f.name] = [constValue(b, f.e, f.name), null]; });
+          return id;
+        }
+        default:
+          ctx.problem('cannot build this expression');
+          return newBlock(ctx, 'operator_add', parent);
+      }
+    }
+
+    function callBlock (b, node, parent) {
+      const ctx = b.ctx;
+      const id = newBlock(ctx, node.op, parent);
+      const phs = placeholders(TEMPLATES[node.op]);
+      if (node.args.length !== phs.length) {
+        ctx.note(node.op + ' takes ' + phs.length + ' value(s) but ' + node.args.length + ' were given');
+      }
+      phs.forEach((ph, i) => { if (i < node.args.length) putValue(b, id, node.op, ph, node.args[i]); });
+      return id;
+    }
+
+    function listMethodBlock (b, node, parent) {
+      const ctx = b.ctx;
+      const [op, argNames] = LIST_METHODS[node.m];
+      const id = newBlock(ctx, op, parent);
+      ctx.jt.blocks[id].fields.LIST = [node.name, listId(b, node.name)];
+      argNames.forEach((an, i) => { if (i < node.args.length) putValue(b, id, op, { kind: '', name: an }, node.args[i]); });
+      return id;
+    }
+
+    /* --- statement chains --- */
+    function attachComment (b, blockId, text, anchor) {
+      const cid = b.ctx.uid();
+      b.ctx.jt.blocks[blockId].comment = cid;
+      b.ctx.jt.comments[cid] = {
+        blockId, x: anchor.x - 160, y: anchor.y - 60,
+        width: 200, height: 100, minimized: false, text
+      };
+    }
+    function floatingComment (b, c) {
+      const cid = b.ctx.uid();
+      b.ctx.jt.comments[cid] = {
+        blockId: c.kind === 'orphaned' ? b.ctx.uid() : null,
+        x: c.x, y: c.y, width: 200, height: 100, minimized: false, text: c.text
+      };
+      if (c.kind === 'orphaned') delete b.ctx.jt.comments[cid].blockId;
+    }
+
+    function emitStack (b, items, parent, anchor) {
+      const ctx = b.ctx;
+      let first = null, prev = null, pending = null;
+      for (const item of items) {
+        if (item.t === 'comment') {
+          if (item.floating) { floatingComment(b, item); pending = null; continue; }
+          (pending || (pending = [])).push(item.text);
+          continue;
+        }
+        const id = emitItem(b, item, parent, anchor);
+        if (id === null) continue;
+        if (pending) { attachComment(b, id, pending.join('\n'), anchor); pending = null; }
+        if (first === null) first = id; else ctx.jt.blocks[prev].next = id;
+        prev = id;
+      }
+      return first;
+    }
+
+    function emitItem (b, item, parent, anchor) {
+      const ctx = b.ctx;
+      switch (item.t) {
+        case 'forever': case 'repeat': case 'repeatUntil': case 'while':
+        case 'forEach': case 'if':
+          return controlBlock(b, item, parent, anchor);
+        case 'assign': {
+          const op = item.how === '+=' ? 'data_changevariableby' : 'data_setvariableto';
+          const id = newBlock(ctx, op, parent);
+          ctx.jt.blocks[id].fields.VARIABLE = [item.name, varId(b, item.name)];
+          putValue(b, id, op, { kind: '', name: 'VALUE' }, item.value);
+          return id;
+        }
+        case 'exprstmt': {
+          const node = item.e;
+          if (node.t === 'call' || node.t === 'generic' || node.t === 'custom') return buildExpr(b, node, parent);
+          const isReporter = node.t === 'bin' || node.t === 'listIdx' || node.t === 'listLen' ||
+            node.t === 'mathop' || node.t === 'arg' || node.t === 'num' || node.t === 'str' ||
+            node.t === 'color' || node.t === 'var' || node.t === 'list' || node.t === 'empty' ||
+            (node.t === 'listMethod' && LIST_REPORTERS.has(node.m));
+          if (isReporter) {
+            ctx.problem('this is a reporter, not a command — a bare reporter on its own line does nothing');
+          }
+          return buildExpr(b, node, parent);
+        }
+        case 'loose': {
+          const pos = item.pos || { x: 0, y: 0 };
+          const id = ctx.uid();
+          ctx.jt.blocks[id] = [12, item.name, varId(b, item.name), pos.x, pos.y];
+          return null;
+        }
+        default: return null;
+      }
+    }
+
+    function controlBlock (b, item, parent, anchor) {
+      const ctx = b.ctx;
+      const SET = {
+        forever: ['control_forever', null],
+        repeat: ['control_repeat', 'TIMES'],
+        repeatUntil: ['control_repeat_until', 'CONDITION'],
+        while: ['control_while', 'CONDITION']
+      };
+      let op, argName, condNode = null, varName = null;
+      if (item.t === 'if') { op = item.elseBody ? 'control_if_else' : 'control_if'; argName = 'CONDITION'; condNode = item.cond; }
+      else if (item.t === 'forEach') { op = 'control_for_each'; argName = 'VALUE'; condNode = item.value; varName = item.name; }
+      else { op = SET[item.t][0]; argName = SET[item.t][1]; condNode = item.arg; }
+      const id = newBlock(ctx, op, parent);
+      if (varName !== null) ctx.jt.blocks[id].fields.VARIABLE = [varName, varId(b, varName)];
+      if (argName) putValue(b, id, op, { kind: '', name: argName }, condNode);
+      const first = emitStack(b, item.body, id, anchor);
+      ctx.jt.blocks[id].inputs.SUBSTACK = first === null ? [1, null] : [2, first];
+      if (item.t === 'if' && item.elseBody) {
+        const e = emitStack(b, item.elseBody, id, anchor);
+        ctx.jt.blocks[id].inputs.SUBSTACK2 = e === null ? [1, null] : [2, e];
+      }
+      return id;
+    }
+
+    /* --- scripts --- */
+    function scriptPosition (b, s, index) {
+      if (s.pos) return s.pos;
+      b.ctx.note('script has no "// @ x,y" position, so it was placed automatically in the code area');
+      return { x: 40, y: 60 + index * 70 };
+    }
+
+    function emitScript (b, s, index) {
+      const ctx = b.ctx;
+      const pos = scriptPosition(b, s, index);
+      const anchor = pos;
+      if (s.t === 'hat') {
+        const id = newBlock(ctx, s.op, null);
+        ctx.jt.blocks[id].topLevel = true;
+        ctx.jt.blocks[id].x = pos.x; ctx.jt.blocks[id].y = pos.y;
+        const phs = placeholders(HATS[s.op]);
+        s.args.forEach((a, i) => {
+          if (!phs[i]) return;
+          if (a.kind === 'field') {
+            // broadcast menus keep their id so other targets can match
+            const owner = built.find(x => x.ctx.bcasts.has(a.text));
+            ctx.jt.blocks[id].fields[phs[i].name] = [a.text, owner ? owner.ctx.bcasts.get(a.text) : null];
+            return;
+          }
+          putValue(b, id, s.op, phs[i], a.e);
+        });
+        if (s.cmts.length) attachComment(b, id, s.cmts.map(c => c.text).join('\n'), anchor);
+        const first = emitStack(b, s.body, id, anchor);
+        if (first) ctx.jt.blocks[id].next = first;
+        return id;
+      }
+      if (s.t === 'define') return emitDefine(b, s, pos);
+      if (s.t === 'loose') {
+        const p2 = s.pos || { x: 0, y: 0 };
+        if (!s.pos) ctx.note('loose variable has no "// @ x,y" position, so it was placed automatically');
+        ctx.jt.blocks[ctx.uid()] = [12, s.name, varId(b, s.name), p2.x, p2.y];
+        return null;
+      }
+      // hatless script: the first statement is the top-level block
+      const first = emitStack(b, s.body, null, anchor);
+      if (first !== null) {
+        const blk = ctx.jt.blocks[first];
+        if (Array.isArray(blk)) return null;
+        if (s.cmts.length) attachComment(b, first, s.cmts.map(c => c.text).join('\n'), anchor);
+        if (blk.topLevel) { blk.x = pos.x; blk.y = pos.y; }
+        else { blk.topLevel = true; blk.x = pos.x; blk.y = pos.y; }
+      }
+      return first;
+    }
+
+    function emitDefine (b, s, pos) {
+      const ctx = b.ctx;
+      // argument ids were already handed out by the registration pass, so
+      // a call emitted before this define still lines up with the prototype
+      let reg = ctx.procs.get(s.code);
+      if (!reg) {
+        const types = (s.code.match(/%[sb]/g) || []).map(x => (x === '%b' ? 'b' : 's'));
+        reg = { params: s.params.map((name, i) => ({ name, bool: types[i] === 'b', id: uid() })), warp: s.warp };
+        ctx.procs.set(s.code, reg);
+      }
+      const params = reg.params;
+      const defId = newBlock(ctx, 'procedures_definition', null);
+      const protoId = newBlock(ctx, 'procedures_prototype', defId);
+      ctx.jt.blocks[protoId].mutation = {
+        tagName: 'mutation', children: [], proccode: s.code,
+        argumentids: JSON.stringify(params.map(x => x.id)),
+        argumentnames: JSON.stringify(params.map(x => x.name)),
+        argumentdefaults: JSON.stringify(params.map(x => (x.bool ? false : ''))),
+        warp: s.warp ? 'true' : 'false'
+      };
+      ctx.jt.blocks[defId].inputs.custom_block = [1, protoId];
+      ctx.jt.blocks[defId].topLevel = true;
+      ctx.jt.blocks[defId].x = pos.x; ctx.jt.blocks[defId].y = pos.y;
+      if (s.cmts.length) attachComment(b, defId, s.cmts.map(c => c.text).join('\n'), pos);
+      ctx.procStack.push({ code: s.code, params });
+      const first = emitStack(b, s.body, defId, pos);
+      ctx.procStack.pop();
+      if (first) ctx.jt.blocks[defId].next = first;
+      return defId;
+    }
+
+    /* --- pass 2: scripts, per target --- */
+    built.forEach(b => {
+      const ctx = b.ctx;
+      // register every custom block first so calls may precede their define
+      b.t.scripts.filter(s => s.t === 'define').forEach(s => {
+        const types = (s.code.match(/%[sb]/g) || []).map(x => (x === '%b' ? 'b' : 's'));
+        if (types.length !== s.params.length) {
+          ctx.problem('define ' + JSON.stringify(s.code) + ' has ' + types.length +
+            ' %s/%b placeholder(s) but ' + s.params.length + ' parameter name(s)');
+        }
+        ctx.procs.set(s.code, { params: s.params.map((name, i) => ({ name, bool: types[i] === 'b', id: uid() })), warp: s.warp });
+      });
+      (b.t.floaters || []).forEach(f => floatingComment(b, f));
+      b.t.scripts.forEach((s, i) => {
+        ctx.script = s.t === 'define' ? 'define ' + s.code
+          : s.t === 'hat' ? String(HATS[s.op] || s.op).replace(/\{[^}]*\}/g, '…') : 'stack';
+        try {
+          emitScript(b, s, i);
+        } catch (e) {
+          if (e instanceof CompileError) ctx.problem(e.message);
+          else throw e;
+        }
+      });
+      ctx.script = '';
+
+      // target properties
+      const p = b.t.props;
+      const num = (key, dflt) => (typeof p[key] === 'number' && Number.isFinite(p[key]) ? p[key] : dflt);
+      b.jt.currentCostume = num('currentCostume', 0);
+      b.jt.volume = num('volume', 100);
+      b.jt.layerOrder = num('layerOrder', b.index);
+      if (b.t.isStage) {
+        Object.keys(STAGE_PROPS).forEach(k => { b.jt[k] = p[k] === undefined ? STAGE_PROPS[k] : p[k]; });
+        b.jt.costumes = b.jt.costumes || [];
+        b.jt.sounds = b.jt.sounds || [];
+        b.jt.tempo = b.jt.tempo === undefined ? 60 : b.jt.tempo;
+      } else {
+        Object.keys(SPRITE_PROPS).forEach(k => { b.jt[k] = p[k] === undefined ? SPRITE_PROPS[k] : p[k]; });
+      }
+      // empty targets still need the asset lists present
+      b.jt.costumes = b.jt.costumes || [];
+      b.jt.sounds = b.jt.sounds || [];
+      if (!Object.keys(b.jt.broadcasts).length) delete b.jt.broadcasts;
+    });
+
+    /* --- monitors: restore values and make sure ids still resolve --- */
+    doc.monitors.forEach(m => {
+      const isVar = m.opcode === 'data_variable';
+      const isList = m.opcode === 'data_listcontents';
+      if (isVar || isList) {
+        const params = m.params || {};
+        const name = params.VARIABLE !== undefined ? params.VARIABLE : params.LIST;
+        let holder = null, key = null;
+        built.forEach(x => {
+          if (holder) return;
+          const mm = isVar ? x.jt.variables : x.jt.lists;
+          if (m.id && mm[m.id]) { holder = x.jt; key = m.id; }
+          else if (name !== undefined) {
+            for (const id of Object.keys(mm)) if (mm[id][0] === name) { holder = x.jt; key = id; break; }
+          }
+        });
+        if (!holder) {
+          add('note', '(monitors)', '', 'dropped a monitor for "' + name + '": no such ' + (isVar ? 'variable' : 'list') + ' remains');
+          return;
+        }
+        m.id = key;
+        m.value = isVar ? holder.variables[key][1] : holder.lists[key][1];
+      }
+      if (m.id === undefined || m.id === null) m.id = uid();
+      project.monitors.push(m);
+    });
+
+    if (context) {
+      // One target, rebuilt in place. Monitors and the other targets are
+      // deliberately left alone: the caller splices this back in.
+      return { json: built[0].jt, targetName: built[0].t.name, diagnostics, fatal: false };
+    }
+    project.targets = built.map(b => b.jt);
+    return { json: project, diagnostics, fatal: false };
+  }
+
+  return { compile, CompileError };
+})();
+//</compiler>
 </script>
 
 <script>
 (() => {
   const $ = id => document.getElementById(id);
   let zip = null, project = null, originalName = 'project.sb3', dirty = false;
-  let tab = 'json', lastResult = null;
+  let tab = 'json', lastResult = null, pseudoDirty = false;
 
   function showError(title, err) {
     $('modalTitle').textContent = title;
@@ -701,6 +2009,11 @@ const SB3Decompiler = (() => {
       $('stats').textContent = `${Object.keys(zip.files).length} archive entries • project.json ${fmtBytes(raw.length)}`;
       $('size').textContent = `${fmtBytes(file.size)} loaded`;
       lastResult = null;
+      pseudoDirty = false;
+      acCustom = [];
+      closeAC();
+      $('pCompile').disabled = true;
+      showSync();
       if (tab === 'pseudo') runDecompile();
     } catch (e) { showError('Could not open SB3', e); }
   }
@@ -780,11 +2093,50 @@ const SB3Decompiler = (() => {
     });
     $('paneJson').classList.toggle('active', t === 'json');
     $('panePseudo').classList.toggle('active', t === 'pseudo');
-    if (t === 'pseudo') runDecompile();
+    if (t !== 'pseudo') closeAC();
+    if (t === 'pseudo' && !pseudoDirty) runDecompile();
+    else if (t === 'pseudo') { $('pCompile').disabled = false; showSync(); }
   }
   document.querySelectorAll('.tab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 
   /* ---------- decompiler UI ---------- */
+  // The JSON tab is the source of truth. The pseudocode tab is an editable
+  // view of it: nothing typed here counts until it has been applied.
+
+  // Which target the box is showing. null means the whole project.
+  function scopeTarget () {
+    const v = $('tsel').value;
+    return (!lastResult || v === '__all__') ? null : lastResult.targets[+v] || null;
+  }
+  function scopeName (t) { return t.isStage ? 'the stage' : 'sprite \u201c' + t.name + '\u201d'; }
+
+  // Say out loud how the box relates to project.json right now.
+  function showSync () {
+    if (!zip) return setPseudoState('', 'no project open');
+    if (pseudoDirty) return setPseudoState('edited', 'edited \u2014 press Apply to project');
+    setPseudoState('ok', 'in sync with project.json');
+  }
+  function setPseudoState (cls, text) {
+    const el = $('pState');
+    el.className = 'pstate ' + (cls || '');
+    el.textContent = text;
+  }
+  function setPseudoDirty (v) {
+    pseudoDirty = v;
+    $('pCompile').disabled = !v || !zip;
+    if (v) { closeAC(); setPseudoState('edited', 'edited \u2014 press Apply to project'); }
+  }
+  function updateNote () {
+    const t = scopeTarget();
+    $('pNote').innerHTML = t
+      ? 'Editing <b>' + escapeHtml(scopeName(t)) + '</b> only \u2014 it is shown as a standalone file with no stage line. Apply rebuilds just this target and splices it back into project.json; every other target, the monitors and the assets stay exactly as they are.'
+      : 'Editing <b>the whole project</b> as one file. Apply rebuilds all of project.json, then re-renders this text from the result. Pick a single target above to edit just that one instead.';
+  }
+  function discardOk() {
+    if (!pseudoDirty) return true;
+    return confirm('This pseudocode has edits that have not been applied. Throw them away and reload it from project.json?');
+  }
+
   function currentOptions() {
     return {
       positions: $('optPos').checked,
@@ -807,44 +2159,135 @@ const SB3Decompiler = (() => {
       const lv = document.createElement('span'); lv.className = 'lv ' + d.level; lv.textContent = d.level;
       const msg = document.createElement('span');
       const where = document.createElement('span'); where.className = 'where';
-      where.textContent = d.target + (d.script ? ' › ' + d.script : '') + ': ';
+      where.textContent = d.target + (d.script ? ' \u203a ' + d.script : '') + ': ';
       msg.appendChild(where); msg.appendChild(document.createTextNode(d.message));
       li.appendChild(lv); li.appendChild(msg); ul.appendChild(li);
     }
   }
 
-  function runDecompile() {
+  function runDecompile(keepEdits) {
     const out = $('pseudo');
-    $('pCopy').disabled = true; $('pDownload').disabled = true;
-    if (!zip) { out.value = ''; setDiag('Open an SB3 file to decompile it.', []); return; }
+    $('pCopy').disabled = true; $('pDownload').disabled = true; $('pCompile').disabled = true;
+    if (!zip) { out.value = ''; setPseudoDirty(false); setDiag('Open an SB3 file to decompile it.', []); return; }
     let obj;
     try { obj = JSON.parse($('code').value); }
     catch (e) { out.value = ''; setDiag('<b>Cannot decompile:</b> the JSON tab has a syntax error.', [], e.message); return; }
     try { lastResult = SB3Decompiler.decompile(obj, currentOptions()); }
     catch (e) { out.value = ''; setDiag('<b>Cannot decompile:</b> ' + escapeHtml(e.message), []); return; }
+    acCustom = customBlocks(obj);
 
     const sel = $('tsel'), prev = sel.value;
     sel.replaceChildren(new Option('All targets', '__all__'));
     lastResult.targets.forEach((t, i) => sel.appendChild(new Option((t.isStage ? '[stage] ' : '') + t.name + ' (' + t.scripts + ' scripts)', String(i))));
     sel.value = [...sel.options].some(o => o.value === prev) ? prev : '__all__';
     showPseudo();
+    if (!keepEdits) { setPseudoDirty(false); showSync(); }
 
     const d = lastResult.diagnostics;
     const errs = d.filter(x => x.level === 'error').length, notes = d.length - errs;
-    setDiag(`<b>Diagnostics</b> — ${errs} error${errs === 1 ? '' : 's'}, ${notes} note${notes === 1 ? '' : 's'}`, d);
+    setDiag(`<b>Diagnostics</b> \u2014 ${errs} error${errs === 1 ? '' : 's'}, ${notes} note${notes === 1 ? '' : 's'}`, d);
+  }
+
+  // Rebuild project.json from this text, then immediately re-render the
+  // canonical pseudocode from the result, so what is shown is what was
+  // understood. When a single target is being edited it is rebuilt in the
+  // context of the whole project and spliced back into the JSON, leaving
+  // every other target alone.
+  function runCompile() {
+    if (!zip) return;
+    closeAC();
+    let obj;
+    try { obj = JSON.parse($('code').value); }
+    catch (e) {
+      setDiag('<b>Nothing was applied.</b> The JSON tab has a syntax error, so there is no project to apply to. Fix it there, or press Discard edits.', [], e.message);
+      $('diag').open = true;
+      return;
+    }
+    const t = scopeTarget();
+    let res;
+    try {
+      res = t ? SB3Compiler.compile($('pseudo').value, { context: obj })
+              : SB3Compiler.compile($('pseudo').value);
+    } catch (e) {
+      setDiag('<b>Cannot compile:</b> ' + escapeHtml(e && e.message ? e.message : String(e)), []);
+      $('diag').open = true;
+      return;
+    }
+    if (res.fatal) {
+      setDiag('<b>Nothing was applied \u2014 project.json was left unchanged.</b> ' + escapeHtml(res.diagnostics[0].message), res.diagnostics);
+      $('diag').open = true;
+      return;
+    }
+    if (t) {
+      const at = obj.targets.findIndex(x => x && x.name === t.name);
+      if (at < 0) {
+        setDiag('<b>Nothing was applied.</b> ' + escapeHtml(t.name) +
+          ' is no longer one of the targets in project.json. Press Discard edits to reload the pseudocode.', res.diagnostics);
+        $('diag').open = true;
+        return;
+      }
+      // keep any target field the text format does not model
+      obj.targets[at] = Object.assign({}, obj.targets[at], res.json);
+      res.diagnostics.push({ level: 'note', target: res.targetName, script: '',
+        message: 'rebuilt ' + Object.keys(res.json.blocks || {}).length + ' block(s) and left the other ' +
+                 (obj.targets.length - 1) + ' target(s), the monitors and the assets untouched' });
+    } else {
+      obj = res.json;
+    }
+    const problems = res.diagnostics.filter(d => d.level === 'error');
+    $('code').value = JSON.stringify(obj, null, 2);
+    setDirty(true);
+    setStatus('Compiled', 'ok');
+    $('dirty').textContent = '\u25cf Compiled \u2014 unsaved';
+    $('dirty').style.color = 'var(--warn)';
+    runDecompile();
+    if (problems.length || res.diagnostics.length) {
+      const notes = res.diagnostics.length - problems.length;
+      setDiag(`<b>Applied to ${t ? escapeHtml(scopeName(t)) : 'the project'}</b> \u2014 ${problems.length} error(s), ${notes} note(s) while building.`, res.diagnostics);
+      $('diag').open = true;
+    } else {
+      setDiag(`<b>Applied to ${t ? escapeHtml(scopeName(t)) : 'the project'}</b> \u2014 no diagnostics. The pseudocode below has been re-rendered from the new project.json.`, []);
+    }
+    setPseudoState('ok', t ? 'applied \u2014 ' + scopeName(t) + ' in project.json' : 'applied \u2014 whole project in project.json');
+    const b = $('pCompile'); const old = b.textContent;
+    b.textContent = 'Applied \u2713';
+    setTimeout(() => { b.textContent = old; showSync(); }, 1600);
   }
 
   function showPseudo() {
     if (!lastResult) return;
-    const v = $('tsel').value;
-    $('pseudo').value = v === '__all__' ? lastResult.text : lastResult.targets[+v].text + '\n';
+    closeAC();
+    const t = scopeTarget();
+    $('pseudo').value = t ? t.text + '\n' : lastResult.text;
     $('pseudo').scrollTop = 0;
     $('pCopy').disabled = false; $('pDownload').disabled = false;
+    updateNote();
   }
 
-  $('tsel').onchange = showPseudo;
-  ['optPos','optIds','optMon','optList'].forEach(id => $(id).addEventListener('change', () => { if (tab === 'pseudo') runDecompile(); }));
-  $('pRefresh').onclick = runDecompile;
+  $('tsel').onchange = () => { if (discardOk()) { showPseudo(); showSync(); } };
+  ['optPos','optIds','optMon','optList'].forEach(id => $(id).addEventListener('change', () => {
+    if (tab !== 'pseudo') return;
+    if (!discardOk()) { setPseudoState('edited', 'edited \u2014 press Apply to project'); return; }
+    runDecompile();
+  }));
+  $('pRefresh').onclick = () => { if (discardOk()) runDecompile(); };
+  $('pCompile').onclick = runCompile;
+  $('pseudo').addEventListener('input', () => {
+    setPseudoDirty(true);
+    if (acSettling) { acSettling = false; return; }
+    updateAC();
+  });
+  $('pseudo').addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      if (!$('pCompile').disabled) runCompile();
+      return;
+    }
+    if (acKey(e)) e.preventDefault();
+  });
+  $('pseudo').addEventListener('click', updateAC);
+  $('pseudo').addEventListener('blur', () => setTimeout(closeAC, 120));
+  ['scroll','resize'].forEach(ev => window.addEventListener(ev, () => { if (acItems.length) placeAC(); }));
 
   $('pCopy').onclick = async () => {
     const ta = $('pseudo');
@@ -863,12 +2306,291 @@ const SB3Decompiler = (() => {
     document.body.appendChild(a); a.click(); a.remove();
   };
 
+  /* ---------- autocomplete popup ----------
+     The menu is built from the very same vocabulary the decompiler prints and
+     the compiler reads, so every entry it offers is a name the text format
+     genuinely accepts. It is anchored to the caret by a hidden, textarea-shaped
+     mirror holding the text up to the caret plus a zero-width marker: the
+     marker's own offset is the anchor point. */
+  const AC_MAX = 30;
+  let acCat = null;                 // the block vocabulary, built once
+  let acItems = [], acIndex = 0;    // what the popup is offering right now
+  let acStart = 0, acHead = '';     // the range a suggestion would replace
+  let acCustom = [];                // this project's own custom blocks
+  let acSettling = false;           // ignore the input event we caused
+
+  function vocabulary () {
+    if (acCat) return acCat;
+    const V = (typeof SB3Decompiler !== 'undefined') ? SB3Decompiler.vocab : null;
+    const out = [], seen = new Set();
+    const add = (name, fill, group, ns, hint) => {
+      const k = name.toLowerCase() + '\u0000' + (ns || '');
+      if (!name || seen.has(k)) return;
+      seen.add(k);
+      out.push({ name, fill, group, ns: ns || null, hint: hint || '' });
+    };
+    if (V) {
+      // call-shaped blocks: motion_movesteps -> move({STEPS}) -> "move("
+      for (const op of Object.keys(V.TEMPLATES)) {
+        const tpl = String(V.TEMPLATES[op]);
+        const cut = tpl.indexOf('(');
+        if (cut < 1) continue;
+        const full = tpl.slice(0, cut);                 // "move", "pen.clear", "{@LIST}.add"
+        const dot = full.lastIndexOf('.');
+        const bare = dot < 0 ? full : full.slice(dot + 1);
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(bare)) continue;  // placeholders start here
+        const args = tpl.slice(cut).match(/\{[^{}]*\}/g) || [];
+        add(bare, bare + '(', 'block', dot < 0 ? null : full.slice(0, dot),
+          args.length ? op + ' \u00b7 ' + args.length + ' input' + (args.length > 1 ? 's' : '') : op);
+      }
+      for (const op of Object.keys(V.INFIX)) {
+        const t = V.INFIX[op];
+        add(Array.isArray(t) ? String(t[0]) : String(t), String(Array.isArray(t) ? t[0] : t), 'operator', null, op);
+      }
+      for (const op of Object.keys(V.HATS)) {
+        const tpl = String(V.HATS[op]);
+        add(tpl, tpl + ' {', 'hat', null, op);          // placeholders kept verbatim
+      }
+    }
+    for (const m of ['abs','floor','ceiling','sqrt','sin','cos','tan','asin','acos','atan','ln','log','e ^','10 ^'])
+      add(m, m + '(', 'math', null, 'operator_mathop');
+    for (const m of ['add','delete','clear','insert','replace','indexOf','contains','show','hide'])
+      add(m, m + '(', 'list', '@', '@list.' + m + '()');
+    for (const k of ['if','else','repeat','forever','while','until','switch','case','default',
+                     'define','call','props','stage','sprite','on','var','list','costume','sound','broadcast','props'])
+      add(k, k, 'syntax', null, '');
+    for (const m of ['//', '/*', '**', '@', '$', '%', '"', '()', '{'])
+      add(m, m, 'syntax', null, '');
+    acCat = out;
+    return out;
+  }
+
+  // Every custom block in the project, keyed on its first word so that typing
+  // "Fla" offers call "Flash"().
+  function customBlocks (obj) {
+    const seen = new Set(), out = [];
+    for (const t of (obj && obj.targets) || []) {
+      for (const id of Object.keys(t.blocks || {})) {
+        const b = t.blocks[id], m = b && b.mutation;
+        if (!m || b.opcode !== 'procedures_prototype' || !m.proccode) continue;
+        const label = String(m.proccode).split('\u0000')[0];
+        const first = /^[A-Za-z0-9_]+/.exec(label);
+        if (!label || seen.has(label)) continue;
+        seen.add(label);
+        out.push({ name: first ? first[0] : label, fill: JSON.stringify(label) + '(', group: 'custom', ns: null,
+                   sort: label.length, hint: (t.isStage ? '[stage] ' : '') + t.name });
+      }
+    }
+    return out;
+  }
+
+  // Split what is under the caret into the part that must be kept and the word
+  // being typed. "pen.cl" -> start at "p", head "pen.", word "cl", ns "pen".
+  // "$speed" -> head "$", which names a variable, not a block.
+  function acToken (ta, pos) {
+    const v = ta.value;
+    let wordStart = pos;
+    while (wordStart > 0 && /[A-Za-z0-9_]/.test(v[wordStart - 1])) wordStart--;
+    let start = wordStart;
+    if (start > 0 && v[start - 1] === '.') {
+      start -= 1;                                                   // the dot
+      while (start > 0 && /[A-Za-z0-9_]/.test(v[start - 1])) start -= 1;
+      while (start > 0 && /[$@%]/.test(v[start - 1])) start -= 1;
+    } else {
+      while (start > 0 && /[$@%]/.test(v[start - 1])) start -= 1;
+    }
+    const head = v.slice(start, wordStart);
+    // an explicit dot commits you to a single namespace
+    let ns = null;
+    if (head.endsWith('.')) {
+      ns = head.startsWith('@') ? '@' : (head.slice(0, -1).split('.').pop() || null);
+    }
+    return { start, head, ns, word: v.slice(wordStart, pos),
+             line: v.slice(v.lastIndexOf('\n', pos - 1) + 1, pos) };
+  }
+
+  // No menu inside a string, a comment or a {PLACEHOLDER}: none of those hold a
+  // block name.
+  function acContextOk (line) {
+    let inStr = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (inStr && c === '\\') { i++; continue; }
+      if (c === '"') inStr = !inStr;
+      else if (!inStr && c === '/' && line[i + 1] === '/') return false;
+    }
+    if (inStr) return false;
+    let depth = 0;
+    for (const c of line) { if (c === '{') depth++; else if (c === '}') depth--; }
+    return depth <= 0;
+  }
+
+  function acRank (word, ns) {
+    const w = word.toLowerCase();
+    const hits = [];
+    const take = (e, s) => { if (ns && e.ns !== ns) return; hits.push({ e, s }); };
+    for (const e of acCustom) {
+      const n = e.name.toLowerCase();
+      if (n === w) take(e, 0); else if (n.startsWith(w)) take(e, 1);
+      else if (w.length >= 3 && n.includes(w)) take(e, 2);
+    }
+    for (const e of vocabulary()) {
+      const n = e.name.toLowerCase();
+      if (n === w) take(e, 1); else if (n.startsWith(w)) take(e, 2);
+      else if (w.length >= 3 && n.includes(w)) take(e, 3);
+    }
+    hits.sort((a, b) => a.s - b.s || (a.e.sort || a.e.name.length) - (b.e.sort || b.e.name.length) ||
+                       a.e.name.localeCompare(b.e.name));
+    const out = [], dup = new Set();
+    for (const h of hits) {
+      const k = h.e.name.toLowerCase();
+      if (dup.has(k)) continue;      // pen.clear and @list.clear are one row here
+      dup.add(k);
+      out.push(h.e);
+      if (out.length === AC_MAX) break;
+    }
+    return out;
+  }
+
+  function updateAC () {
+    const ta = $('pseudo');
+    if (!ta || !zip || !ta.value) return closeAC();
+    const pos = ta.selectionStart;
+    if (pos !== ta.selectionEnd) return closeAC();
+    const tok = acToken(ta, pos);
+    if (!acContextOk(tok.line)) return closeAC();
+    // "$speed" and "@Warnings" name data, not blocks: leave them alone
+    if (tok.head && !tok.head.includes('.')) return closeAC();
+    let start = tok.start, head = tok.head, word = tok.word;
+    if (!word) {
+      // after "@f." offer that list's methods; after an operator, the operators
+      let c = ta.value[pos - 1] || '';
+      if (tok.head.includes('.')) word = '';
+      else {
+        let at = pos - 1;
+        if (!'+-*/<>=%&|!'.includes(c)) {
+          while (at > 0 && /[ \t]/.test(ta.value[at - 1])) at--;
+          c = ta.value[at - 1] || '';
+        }
+        if (!'+-*/<>=%&|!'.includes(c)) return closeAC();
+        word = c; start = at - 1; head = '';
+      }
+    }
+    const items = acRank(word, tok.ns);
+    if (!items.length) return closeAC();
+    acItems = items; acIndex = 0; acStart = start; acHead = head;
+    renderAC();
+  }
+
+  function closeAC () {
+    acItems = [];
+    const ul = $('acList');
+    if (ul) { ul.hidden = true; ul.replaceChildren(); }
+  }
+
+  function renderAC () {
+    const ul = $('acList');
+    ul.hidden = false;
+    ul.replaceChildren();
+    const frag = document.createDocumentFragment();
+    acItems.forEach((it, i) => {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      li.setAttribute('aria-selected', i === acIndex ? 'true' : 'false');
+      const b = document.createElement('b');
+      if (acHead) b.appendChild(document.createTextNode(acHead));
+      const u = document.createElement('u');
+      u.textContent = it.name;
+      b.appendChild(u);
+      const em = document.createElement('i');
+      em.textContent = it.hint;
+      li.append(b, em);
+      li.addEventListener('mousedown', e => { e.preventDefault(); acceptAC(i); });
+      frag.appendChild(li);
+    });
+    const foot = document.createElement('li');
+    foot.className = 'acfoot';
+    foot.textContent = acItems.length + (acItems.length === AC_MAX ? '+ of ' : ' of ') + (vocabulary().length + acCustom.length) +
+      '  \u00b7  \u2191\u2193 choose  \u00b7  Enter accept  \u00b7  Esc dismiss';
+    ul.append(frag, foot);
+    placeAC();
+  }
+
+  // Put the popup just under the caret, flipping above it near the bottom edge.
+  function placeAC () {
+    const ta = $('pseudo'), m = $('acMirror'), pop = $('acList');
+    if (!m || !pop || pop.hidden) return;
+    const cs = getComputedStyle(ta);
+    // everything that decides where a character lands has to match exactly
+    for (const k of ['fontFamily','fontSize','fontWeight','fontStyle','fontVariant',
+                     'letterSpacing','wordSpacing','lineHeight',
+                     'paddingTop','paddingRight','paddingBottom','paddingLeft',
+                     'borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth',
+                     'borderTopStyle','borderTopColor','textIndent','tabSize','textTransform',
+                     'whiteSpace','wordBreak','overflowWrap','wordWrap','textAlign'])
+      m.style[k] = cs[k];
+    // the content box has to be exactly as wide as the textarea's, or the
+    // text would wrap at a different point and the caret would be misplaced
+    m.style.boxSizing = 'content-box';
+    m.style.width = ta.clientWidth + 'px';
+    const padL = parseFloat(cs.borderLeftWidth) || 0;
+    const padT = parseFloat(cs.borderTopWidth) || 0;
+    const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5 || 16;
+
+    m.replaceChildren();
+    m.appendChild(document.createTextNode(ta.value.slice(0, acStart)));
+    const mark = document.createElement('span');
+    mark.textContent = ta.value.slice(acStart) || '\u200b';
+    m.appendChild(mark);
+
+    // the mirror holds the whole text, so undo the textarea's scroll to get
+    // where the caret is actually on screen
+    const box = ta.getBoundingClientRect(), mb = m.getBoundingClientRect();
+    const left = mb.left + padL + mark.offsetLeft - ta.scrollLeft;
+    const caretY = mb.top + padT + mark.offsetTop - ta.scrollTop;
+    pop.style.visibility = 'visible';
+    const pw = pop.offsetWidth, ph = pop.offsetHeight;
+    let top = caretY + lh + 2;
+    if (top + ph > box.bottom) top = caretY - ph - 2;
+    if (top < box.top) top = box.top;
+    if (left + pw > innerWidth - 8) left = Math.max(8, innerWidth - 8 - pw);
+    pop.style.left = Math.max(8, left) + 'px';
+    pop.style.top = top + 'px';
+  }
+
+  function acceptAC (which) {
+    const it = acItems[which == null ? acIndex : which];
+    if (!it) return;
+    const ta = $('pseudo');
+    const pos = ta.selectionStart;
+    const fill = acHead ? acHead + it.fill : it.fill;
+    ta.setRangeText(fill, acStart, pos, 'end');
+    closeAC();
+    acSettling = true;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.focus();
+  }
+
+  // Returns true when the key was consumed by the popup.
+  function acKey (e) {
+    if (!acItems.length) {
+      if (e.key === ' ' && (e.ctrlKey || e.metaKey)) { updateAC(); return !!acItems.length; }
+      return false;
+    }
+    if (e.key === 'ArrowDown') { acIndex = (acIndex + 1) % acItems.length; renderAC(); return true; }
+    if (e.key === 'ArrowUp') { acIndex = (acIndex - 1 + acItems.length) % acItems.length; renderAC(); return true; }
+    if (e.key === 'Enter' || e.key === 'Tab') { acceptAC(); return true; }
+    if (e.key === 'Escape') { closeAC(); return true; }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') { closeAC(); return false; }
+    return false;
+  }
+
   /* ---------- drag and drop ---------- */
   const panes = document.querySelector('.panes');
   ['dragenter','dragover'].forEach(ev => panes.addEventListener(ev, e => { e.preventDefault(); document.body.classList.add('dragging'); }));
   ['dragleave','drop'].forEach(ev => panes.addEventListener(ev, e => { e.preventDefault(); document.body.classList.remove('dragging'); }));
   panes.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) openFile(f); });
-  window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue=''; } });
+  window.addEventListener('beforeunload', e => { if (dirty || pseudoDirty) { e.preventDefault(); e.returnValue=''; } });
 })();
 </script>
 </body>
