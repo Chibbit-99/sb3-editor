@@ -298,6 +298,108 @@ T('monitor values are restored from the compiled project',
     meaningful.slice(0, 8).forEach(d => console.log('         ' + d[0] + '\n           - ' + d[1] + '\n           + ' + d[2]));
     fail++;
   }
+
+/* =======================================================================
+   Compiling a single target in the context of the whole project.
+   ======================================================================= */
+const GLOBALS = '  var $speed = 0\n  list @items = [1, 2]\n  broadcast "go"\n';
+const CONTEXT = SB3Compiler.compile(wrap(null, 'say("on the stage")', GLOBALS)).json;
+const spriteOnly = (body) =>
+  'sprite "Runner" {\n' +
+  '  props currentCostume=0 volume=100 layerOrder=1 visible=true x=0 y=0 size=100 direction=90 draggable=false rotationStyle="all around"\n' +
+  '  costume "costume1" file="abc.svg" format="svg" res=1 center=(0,0)\n\n' +
+  '  on flag clicked {   // @ 40,50\n' + body + '\n  }\n}\n';
+
+function C (name, src, check) {
+  let r;
+  try { r = SB3Compiler.compile(src, { context: CONTEXT }); }
+  catch (e) { console.log('THROW  ' + name + ' :: ' + e.message); fail++; return; }
+  if (r.fatal) { console.log('FATAL  ' + name + ' :: ' + r.diagnostics[0].message); fail++; return; }
+  try { check(r.json, r); pass++; console.log('ok     ' + name); }
+  catch (e) { console.log('FAIL   ' + name + ' :: ' + e.message); fail++; }
+}
+
+C('a sprite compiles on its own, with no stage line', spriteOnly('say("hi")'), (j, r) => {
+  if (r.targetName !== 'Runner') throw new Error('targetName is ' + r.targetName);
+  if (j.isStage !== false) throw new Error('it came back as the stage');
+  if (j.name !== 'Runner') throw new Error('name is ' + j.name);
+  if (j.targets) throw new Error('a single target came back wrapped in a project');
+  if (Object.keys(j.blocks).length < 2) throw new Error('no blocks were built');
+  if (r.diagnostics.some(d => d.level === 'error')) throw new Error('errors: ' + JSON.stringify(r.diagnostics));
+});
+
+C('a stage global used by the sprite keeps the id the project already had', spriteOnly('$speed = 1'), (j, r) => {
+  const stageSpeed = Object.keys(CONTEXT.targets[0].variables).find(id => CONTEXT.targets[0].variables[id][0] === 'speed');
+  const setV = Object.values(j.blocks).find(b => b.opcode === 'data_setvariableto');
+  if (!setV) throw new Error('no data_setvariableto');
+  if (!setV.fields || setV.fields.VARIABLE[1] !== stageSpeed) throw new Error('it invented a new variable instead of reusing the global');
+  if (r.diagnostics.some(d => /never declared/.test(d.message))) throw new Error('it warned about a global that exists');
+});
+
+C('a stage list is usable from the sprite', spriteOnly('@items.add(1)'), (j, r) => {
+  const add = Object.values(j.blocks).find(b => b.opcode === 'data_addtolist');
+  if (!add) throw new Error('no data_addtolist');
+  if (r.diagnostics.some(d => /never declared/.test(d.message))) throw new Error('it warned about a list that exists');
+});
+
+C('a broadcast declared on the stage is usable from the sprite', spriteOnly('broadcast("go")'), (j, r) => {
+  const bc = Object.values(j.blocks).find(b => b.opcode === 'event_broadcast');
+  if (!bc) throw new Error('no event_broadcast');
+  const id = Object.keys(CONTEXT.targets[0].broadcasts).find(k => CONTEXT.targets[0].broadcasts[k] === 'go');
+  if (bc.inputs.BROADCAST_INPUT[1][2] !== id) throw new Error('it invented a broadcast id');
+  if (r.diagnostics.some(d => /never declared/.test(d.message))) throw new Error('it warned about a broadcast that exists');
+});
+
+C('a brand new global still resolves, it just has nowhere to be stored', spriteOnly('$fresh = 1'), (j, r) => {
+  const setV = Object.values(j.blocks).find(b => b.opcode === 'data_setvariableto');
+  if (!setV || !setV.fields || !setV.fields.VARIABLE[1]) throw new Error('the variable was not resolved at all');
+  if (!r.diagnostics.some(d => /never declared/.test(d.message))) throw new Error('it should have said the global is new');
+  if (Object.keys(j.variables).length) throw new Error('it stored a global on a sprite, which Scratch has no room for');
+});
+
+C('the stage on its own is still a valid single target', wrap(null, 'say("only the stage")'), (j, r) => {
+  if (j.isStage !== true) throw new Error('it came back as a sprite');
+  if (r.targetName !== 'Stage') throw new Error('targetName is ' + r.targetName);
+});
+
+C('a target with no scripts is a target with no blocks', 'sprite "Empty" {\n}\n', (j) => {
+  if (j.name !== 'Empty') throw new Error('name is ' + j.name);
+  if (Object.keys(j.blocks).length) throw new Error('it invented blocks');
+});
+
+(function () {
+  // an emptied box is almost certainly a mistake, so say so and say what to do
+  for (const blank of ['', '   \n\n  \t']) {
+    const r = SB3Compiler.compile(blank, { context: CONTEXT });
+    if (!r.fatal) { console.log('FAIL   an empty box is refused'); fail++; return; }
+    if (!/All targets/.test(r.diagnostics[0].message)) {
+      console.log('FAIL   the refusal does not say what to do: ' + r.diagnostics[0].message); fail++; return;
+    }
+  }
+  console.log('ok     an emptied box is refused, pointing at "All targets"'); pass++;
+})();
+
+(function () {
+  // without a context, a sprite-only document is still a whole-project error
+  const r = SB3Compiler.compile(spriteOnly('say("hi")'));
+  if (!r.fatal || !/no target is the stage/.test(r.diagnostics[0].message)) {
+    console.log('FAIL   a sprite-only document is rejected when there is no context'); fail++; return;
+  }
+  console.log('ok     a sprite-only document is rejected when there is no context'); pass++;
+})();
+
+(function () {
+  // splicing a rebuilt target back must leave the rest of the project alone
+  const r = SB3Compiler.compile(spriteOnly('say("spliced")'), { context: CONTEXT });
+  const copy = JSON.parse(JSON.stringify(CONTEXT));
+  copy.targets[1] = Object.assign({}, copy.targets[1], r.json);
+  if (copy.targets.length !== 2) throw new Error('target count changed');
+  if (JSON.stringify(copy.targets[0]) !== JSON.stringify(CONTEXT.targets[0])) throw new Error('the stage moved');
+  const say = Object.values(copy.targets[1].blocks).find(b => b.opcode === 'looks_say');
+  if (!say || say.inputs.MESSAGE[1][1] !== 'spliced') throw new Error('the new block is not there');
+  console.log('ok     the rebuilt target splices into a copy of the project'); pass++;
+})();
+
 })();
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

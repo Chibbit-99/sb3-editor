@@ -61,8 +61,26 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .pbar input[type=checkbox]{accent-color:var(--accent)}
 .pbar .grow{margin-right:auto}
 .pbar button{padding:6px 11px;font-size:13px}
-.pstate{font-size:12px;color:var(--warn);font-weight:600}
-.pstate:not(:empty)::before{content:"● "}
+.pnote{flex-basis:100%;font-size:12px;line-height:1.5;color:var(--muted);margin:-2px 0 1px}
+.pnote b{color:var(--accent);font-weight:600}
+.pstate{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
+.pstate.edited{color:var(--warn)}
+.pstate.edited::before{content:"\25cf "}
+.pstate.ok{color:var(--good)}
+.pstate.ok::before{content:"\2713 "}
+
+/* Autocomplete popup. The mirror is a hidden, textarea-shaped copy of the
+   text in which a zero-width marker sits at the caret, so the marker's
+   offset gives the popup its anchor point. */
+#acMirror{position:fixed;visibility:hidden;pointer-events:none;z-index:0;box-sizing:border-box;white-space:pre;overflow:visible}
+.ac{position:fixed;visibility:visible;pointer-events:auto;z-index:900;margin:0;padding:4px;list-style:none;background:#0c2126;border:1px solid #2f646d;border-radius:10px;box-shadow:0 12px 34px #000b;max-height:264px;overflow:auto;min-width:240px;max-width:min(460px,92vw);font:12px/1.4 ui-monospace,Menlo,Consolas,monospace}
+.ac li{display:flex;gap:10px;align-items:baseline;padding:4px 8px;border-radius:6px;white-space:nowrap;cursor:pointer;color:var(--text)}
+.ac li b{font-weight:600;flex:none}
+.ac li b u{text-decoration:none;color:var(--accent);border-bottom:1px solid #35d6c766}
+.ac li i{font-style:normal;color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis}
+.ac li[aria-selected=true]{background:#154049}
+.ac li[aria-selected=true] i{color:#a9cdd1}
+.ac .acfoot{border-top:1px solid var(--line);margin-top:4px;padding:4px 8px 2px;color:var(--muted);font:11px/1.4 system-ui,sans-serif;display:flex;gap:10px}
 button.primary{border-color:var(--accent);color:#041a18;background:linear-gradient(180deg,#4fe3d3,#28b4a7);font-weight:750}
 button.primary:hover{background:#63ece;background:linear-gradient(180deg,#63edde,#31c2b4);border-color:#6ff0e2}
 button.primary:disabled{background:linear-gradient(180deg,#143238,#0e252a);color:var(--text);border-color:#28535a}
@@ -85,7 +103,7 @@ button.primary:disabled{background:linear-gradient(180deg,#143238,#0e252a);color
 .drop{position:absolute;inset:0;z-index:5;display:none;place-items:center;background:#071014e8;border:2px dashed #3e858a;margin:12px;border-radius:10px;font-size:16px;font-weight:700}
 .dragging .drop{display:grid}
 .empty{padding:24px;color:var(--muted);text-align:center}
-.modal{position:fixed;inset:0;background:#0008;display:none;place-items:center;padding:20px}
+.modal{position:fixed;inset:0;z-index:1000;background:#0008;display:none;place-items:center;padding:20px}
 .modal.show{display:grid}
 .dialog{width:min(680px,100%);background:#0c1c21;border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:0 20px 80px #000a}
 .dialog h2{margin:0 0 8px}
@@ -124,19 +142,20 @@ button.primary:disabled{background:linear-gradient(180deg,#143238,#0e252a);color
       </div>
       <div class="pane" id="panePseudo">
         <div class="pbar">
-          <label class="stack">Show <select id="tsel" aria-label="Target to show"><option value="__all__">All targets</option></select></label>
+          <label class="stack" title="All targets shows the whole project as one file, and applying it rebuilds all of project.json. Picking a single target shows just that one; applying it rebuilds only that target and leaves the rest of the project untouched.">Editing <select id="tsel" aria-label="Which target to edit"><option value="__all__">All targets (whole project)</option></select></label>
           <label><input type="checkbox" id="optPos" checked> script positions</label>
           <label><input type="checkbox" id="optIds"> IDs</label>
           <label><input type="checkbox" id="optMon" checked> monitors</label>
           <label class="stack" title="Limits how many list items are printed. Compiling is refused while a list is truncated, because the missing items cannot be recovered — set this to 0 to print every item.">list items shown <input type="number" id="optList" min="0" value="0" title="0 = show every item"></label>
           <span class="grow"></span>
           <span id="pState" class="pstate"></span>
-          <button id="pCompile" disabled title="Build a new project.json from this text, then show the canonical version of it">Compile</button>
-          <button id="pRefresh" title="Throw away your edits and read the project.json tab again">Revert to JSON</button>
+          <button id="pCompile" disabled title="Build a new project.json from this text and switch the JSON tab to it. Shortcut: Ctrl+Enter, or Cmd+Enter on a Mac.">Apply to project</button>
+          <button id="pRefresh" title="Throw away the edits in this box and read the pseudocode from the JSON tab again">Discard edits</button>
           <button id="pCopy" disabled>Copy</button>
           <button id="pDownload" disabled>Download .txt</button>
+          <span id="pNote" class="pnote"></span>
         </div>
-        <textarea id="pseudo" class="code" spellcheck="false" placeholder="Open an SB3 file, then decompile it here. This text is editable: change it and press Compile to rebuild project.json, then Repackage to save the .sb3."></textarea>
+        <textarea id="pseudo" class="code" spellcheck="false" placeholder="Open an SB3 file to decompile it here.&#10;&#10;This text is an editable view of the project.json tab, which stays the source of truth. Type to change it, then press Apply to project to write the change into project.json — or Discard edits to snap back to what the JSON says. Ctrl+Enter applies."></textarea>
         <details class="diag" id="diag" open>
           <summary id="diagHead">Nothing decompiled yet</summary>
           <ul id="diagList"></ul>
@@ -148,6 +167,8 @@ button.primary:disabled{background:linear-gradient(180deg,#143238,#0e252a);color
 </main>
 <footer class="bottom"><span>SB3 = ZIP archive containing <b>project.json</b> and project assets.</span><span id="dirty"></span><span id="size"></span></footer>
 </div>
+<div id="acMirror" aria-hidden="true"></div>
+<ul id="acList" class="ac" role="listbox" hidden></ul>
 <div class="modal" id="modal"><div class="dialog"><h2 id="modalTitle">Error</h2><pre id="modalText"></pre><div class="actions"><button id="close">Close</button></div></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -598,8 +619,10 @@ const SB3Decompiler = (() => {
     '//   define "proccode"(arg, flag:bool) warp { }      call "proccode"(a, b)',
     '//   /// text = Scratch comment      // text = decompiler annotation (e.g. "@ x,y" is the script position)',
     '//',
-    '//   This text is editable. Paste it back into the editor and press Compile to',
-    '//   rebuild project.json, then Repackage .sb3 to write a new Scratch file.'
+    '//   This text is an editable view of project.json. Type in the box to change it and',
+    '//   press Apply to project (Ctrl+Enter) to write the change into project.json, or',
+    '//   Discard edits to snap back to what the JSON says. Repackage .sb3 saves the file.',
+    '//   While typing, a menu offers every block name this format accepts.'
   ];
 
   function decompile(project, options) {
@@ -1344,7 +1367,12 @@ const SB3Compiler = (() => {
   const STAGE_PROPS = { tempo: 60, videoState: 'on', videoTransparency: 50, textToSpeechLanguage: null };
   const SPRITE_PROPS = { visible: true, x: 0, y: 0, size: 100, direction: 90, draggable: false, rotationStyle: 'all around' };
 
-  function compile (text) {
+  /* text             the pseudocode to build
+     options.context  when one target is edited on its own, the rest of the
+                      project. Its names stay resolvable but are not rebuilt. */
+  function compile (text, options) {
+    const opts = options || {};
+    const context = opts.context || null;
     const diagnostics = [];
     const seen = new Set();
     const add = (level, target, script, message) => {
@@ -1362,10 +1390,20 @@ const SB3Compiler = (() => {
       if (e instanceof CompileError) return fail(e.message);
       return fail('could not read the pseudocode: ' + (e && e.message ? e.message : String(e)));
     }
-    if (!doc.targets.length) return fail('no targets found. A project needs at least: stage "Stage" { }');
+    if (!doc.targets.length) {
+      return fail(context
+        ? 'this target has no scripts. Switch the target back to "All targets" to edit the whole project.'
+        : 'no targets found. A project needs at least: stage "Stage" { }');
+    }
     const stages = doc.targets.filter(t => t.isStage);
-    if (!stages.length) return fail('no target is the stage. One target must start with: stage "Stage" {');
-    if (stages.length > 1) return fail('more than one target is marked as the stage: ' + stages.map(t => t.name).join(', '));
+    if (stages.length > 1) {
+      return fail('more than one target is marked as the stage: ' + stages.map(t => t.name).join(', '));
+    }
+    if (!stages.length && !context) {
+      // With a context, the target being edited is one of many, so it is a
+      // sprite and carries no stage line of its own.
+      return fail('no target is the stage. One target must start with: stage "Stage" {');
+    }
 
     const uid = idFactory();
     const meta = doc.meta;
@@ -1429,6 +1467,24 @@ const SB3Compiler = (() => {
       b.ctx.vars.forEach((id, name) => { if (!allVars.has(name)) allVars.set(name, id); });
       b.ctx.lists.forEach((id, name) => { if (!allLists.has(name)) allLists.set(name, id); });
     });
+    // Editing one target on its own: the rest of the project is read-only
+    // context. Its globals stay resolvable, but nothing is rebuilt from it.
+    if (context) {
+      const stage = (context.targets || []).filter(t => t && t.isStage)[0];
+      if (stage) {
+        Object.keys(stage.variables || {}).forEach(id => {
+          const nm = stage.variables[id][0];
+          if (!allVars.has(nm)) allVars.set(nm, id);
+        });
+        Object.keys(stage.lists || {}).forEach(id => {
+          const nm = stage.lists[id][0];
+          if (!allLists.has(nm)) allLists.set(nm, id);
+        });
+      }
+    }
+    // A new global has to live on a stage. When the stage is not part of this
+    // edit there is nowhere to put it, so it stays unrecorded but resolvable.
+    const ghost = () => (stageBuilt ? stageBuilt.jt : { variables: {}, lists: {}, broadcasts: {} });
 
     // A name resolves to the target's own copy, otherwise the global one,
     // otherwise a global is created for it (which is what Scratch does).
@@ -1437,7 +1493,7 @@ const SB3Compiler = (() => {
       if (allVars.has(name)) return allVars.get(name);
       const id = uid();
       allVars.set(name, id);
-      stageBuilt.jt.variables[id] = [name, 0];
+      ghost().variables[id] = [name, 0];
       b.ctx.note('$' + name + ' was never declared; created it as a global variable on the stage');
       return id;
     }
@@ -1446,7 +1502,7 @@ const SB3Compiler = (() => {
       if (allLists.has(name)) return allLists.get(name);
       const id = uid();
       allLists.set(name, id);
-      stageBuilt.jt.lists[id] = [name, []];
+      ghost().lists[id] = [name, []];
       b.ctx.note('@' + name + ' was never declared; created it as a global list on the stage');
       return id;
     }
@@ -1454,9 +1510,15 @@ const SB3Compiler = (() => {
       if (b.ctx.bcasts.has(name)) return b.ctx.bcasts.get(name);
       const found = built.find(x => x.ctx.bcasts.has(name));
       if (found) return found.ctx.bcasts.get(name);
+      if (context) {
+        for (const t of context.targets || []) {
+          const id = Object.keys(t.broadcasts || {}).find(k => t.broadcasts[k] === name);
+          if (id !== undefined) return id;
+        }
+      }
       const id = uid();
-      allVars.set(' b:' + name, id);
-      stageBuilt.jt.broadcasts[id] = name;
+      const g = ghost();
+      g.broadcasts[id] = name;
       b.ctx.bcasts.set(name, id);
       b.ctx.note('broadcast "' + name + '" was never declared; created it on the stage');
       return id;
@@ -1883,6 +1945,11 @@ const SB3Compiler = (() => {
       project.monitors.push(m);
     });
 
+    if (context) {
+      // One target, rebuilt in place. Monitors and the other targets are
+      // deliberately left alone: the caller splices this back in.
+      return { json: built[0].jt, targetName: built[0].t.name, diagnostics, fatal: false };
+    }
     project.targets = built.map(b => b.jt);
     return { json: project, diagnostics, fatal: false };
   }
@@ -1943,8 +2010,10 @@ const SB3Compiler = (() => {
       $('size').textContent = `${fmtBytes(file.size)} loaded`;
       lastResult = null;
       pseudoDirty = false;
-      $('pState').textContent = '';
+      acCustom = [];
+      closeAC();
       $('pCompile').disabled = true;
+      showSync();
       if (tab === 'pseudo') runDecompile();
     } catch (e) { showError('Could not open SB3', e); }
   }
@@ -2024,22 +2093,48 @@ const SB3Compiler = (() => {
     });
     $('paneJson').classList.toggle('active', t === 'json');
     $('panePseudo').classList.toggle('active', t === 'pseudo');
+    if (t !== 'pseudo') closeAC();
     if (t === 'pseudo' && !pseudoDirty) runDecompile();
-    else if (t === 'pseudo') { $('pCompile').disabled = false; }
+    else if (t === 'pseudo') { $('pCompile').disabled = false; showSync(); }
   }
   document.querySelectorAll('.tab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 
   /* ---------- decompiler UI ---------- */
-  // The JSON tab is the source of truth. The pseudocode tab is a view of it
-  // that you can also type into; typing sets pseudoDirty until you compile.
-  function setPseudoDirty(v) {
+  // The JSON tab is the source of truth. The pseudocode tab is an editable
+  // view of it: nothing typed here counts until it has been applied.
+
+  // Which target the box is showing. null means the whole project.
+  function scopeTarget () {
+    const v = $('tsel').value;
+    return (!lastResult || v === '__all__') ? null : lastResult.targets[+v] || null;
+  }
+  function scopeName (t) { return t.isStage ? 'the stage' : 'sprite \u201c' + t.name + '\u201d'; }
+
+  // Say out loud how the box relates to project.json right now.
+  function showSync () {
+    if (!zip) return setPseudoState('', 'no project open');
+    if (pseudoDirty) return setPseudoState('edited', 'edited \u2014 press Apply to project');
+    setPseudoState('ok', 'in sync with project.json');
+  }
+  function setPseudoState (cls, text) {
+    const el = $('pState');
+    el.className = 'pstate ' + (cls || '');
+    el.textContent = text;
+  }
+  function setPseudoDirty (v) {
     pseudoDirty = v;
-    $('pState').textContent = v ? 'edited \u2014 press Compile' : '';
     $('pCompile').disabled = !v || !zip;
+    if (v) { closeAC(); setPseudoState('edited', 'edited \u2014 press Apply to project'); }
+  }
+  function updateNote () {
+    const t = scopeTarget();
+    $('pNote').innerHTML = t
+      ? 'Editing <b>' + escapeHtml(scopeName(t)) + '</b> only \u2014 it is shown as a standalone file with no stage line. Apply rebuilds just this target and splices it back into project.json; every other target, the monitors and the assets stay exactly as they are.'
+      : 'Editing <b>the whole project</b> as one file. Apply rebuilds all of project.json, then re-renders this text from the result. Pick a single target above to edit just that one instead.';
   }
   function discardOk() {
     if (!pseudoDirty) return true;
-    return confirm('The pseudocode has unapplied edits. Throw them away and reload it from project.json?');
+    return confirm('This pseudocode has edits that have not been applied. Throw them away and reload it from project.json?');
   }
 
   function currentOptions() {
@@ -2079,67 +2174,120 @@ const SB3Compiler = (() => {
     catch (e) { out.value = ''; setDiag('<b>Cannot decompile:</b> the JSON tab has a syntax error.', [], e.message); return; }
     try { lastResult = SB3Decompiler.decompile(obj, currentOptions()); }
     catch (e) { out.value = ''; setDiag('<b>Cannot decompile:</b> ' + escapeHtml(e.message), []); return; }
+    acCustom = customBlocks(obj);
 
     const sel = $('tsel'), prev = sel.value;
     sel.replaceChildren(new Option('All targets', '__all__'));
     lastResult.targets.forEach((t, i) => sel.appendChild(new Option((t.isStage ? '[stage] ' : '') + t.name + ' (' + t.scripts + ' scripts)', String(i))));
     sel.value = [...sel.options].some(o => o.value === prev) ? prev : '__all__';
     showPseudo();
-    if (!keepEdits) setPseudoDirty(false);
+    if (!keepEdits) { setPseudoDirty(false); showSync(); }
 
     const d = lastResult.diagnostics;
     const errs = d.filter(x => x.level === 'error').length, notes = d.length - errs;
     setDiag(`<b>Diagnostics</b> \u2014 ${errs} error${errs === 1 ? '' : 's'}, ${notes} note${notes === 1 ? '' : 's'}`, d);
   }
 
-  // Build a new project.json from this text, then immediately re-render the
-  // canonical pseudocode from it, so what is shown is what was understood.
+  // Rebuild project.json from this text, then immediately re-render the
+  // canonical pseudocode from the result, so what is shown is what was
+  // understood. When a single target is being edited it is rebuilt in the
+  // context of the whole project and spliced back into the JSON, leaving
+  // every other target alone.
   function runCompile() {
     if (!zip) return;
-    let res;
-    try { res = SB3Compiler.compile($('pseudo').value); }
+    closeAC();
+    let obj;
+    try { obj = JSON.parse($('code').value); }
     catch (e) {
-      setDiag('<b>Cannot compile:</b> ' + escapeHtml(e && e.message ? e.message : String(e)), []);
-      return;
-    }
-    if (res.fatal) {
-      setDiag('<b>Cannot compile \u2014 project.json was left unchanged.</b> ' + escapeHtml(res.diagnostics[0].message), res.diagnostics);
+      setDiag('<b>Nothing was applied.</b> The JSON tab has a syntax error, so there is no project to apply to. Fix it there, or press Discard edits.', [], e.message);
       $('diag').open = true;
       return;
     }
+    const t = scopeTarget();
+    let res;
+    try {
+      res = t ? SB3Compiler.compile($('pseudo').value, { context: obj })
+              : SB3Compiler.compile($('pseudo').value);
+    } catch (e) {
+      setDiag('<b>Cannot compile:</b> ' + escapeHtml(e && e.message ? e.message : String(e)), []);
+      $('diag').open = true;
+      return;
+    }
+    if (res.fatal) {
+      setDiag('<b>Nothing was applied \u2014 project.json was left unchanged.</b> ' + escapeHtml(res.diagnostics[0].message), res.diagnostics);
+      $('diag').open = true;
+      return;
+    }
+    if (t) {
+      const at = obj.targets.findIndex(x => x && x.name === t.name);
+      if (at < 0) {
+        setDiag('<b>Nothing was applied.</b> ' + escapeHtml(t.name) +
+          ' is no longer one of the targets in project.json. Press Discard edits to reload the pseudocode.', res.diagnostics);
+        $('diag').open = true;
+        return;
+      }
+      // keep any target field the text format does not model
+      obj.targets[at] = Object.assign({}, obj.targets[at], res.json);
+      res.diagnostics.push({ level: 'note', target: res.targetName, script: '',
+        message: 'rebuilt ' + Object.keys(res.json.blocks || {}).length + ' block(s) and left the other ' +
+                 (obj.targets.length - 1) + ' target(s), the monitors and the assets untouched' });
+    } else {
+      obj = res.json;
+    }
     const problems = res.diagnostics.filter(d => d.level === 'error');
-    $('code').value = JSON.stringify(res.json, null, 2);
+    $('code').value = JSON.stringify(obj, null, 2);
     setDirty(true);
     setStatus('Compiled', 'ok');
     $('dirty').textContent = '\u25cf Compiled \u2014 unsaved';
     $('dirty').style.color = 'var(--warn)';
     runDecompile();
-    if (res.diagnostics.length) {
-      setDiag(`<b>Compiled</b> \u2014 ${problems.length} error(s), ${res.diagnostics.length - problems.length} note(s) while building.`, res.diagnostics);
+    if (problems.length || res.diagnostics.length) {
+      const notes = res.diagnostics.length - problems.length;
+      setDiag(`<b>Applied to ${t ? escapeHtml(scopeName(t)) : 'the project'}</b> \u2014 ${problems.length} error(s), ${notes} note(s) while building.`, res.diagnostics);
       $('diag').open = true;
+    } else {
+      setDiag(`<b>Applied to ${t ? escapeHtml(scopeName(t)) : 'the project'}</b> \u2014 no diagnostics. The pseudocode below has been re-rendered from the new project.json.`, []);
     }
+    setPseudoState('ok', t ? 'applied \u2014 ' + scopeName(t) + ' in project.json' : 'applied \u2014 whole project in project.json');
     const b = $('pCompile'); const old = b.textContent;
-    b.textContent = 'Compiled \u2713';
-    setTimeout(() => { b.textContent = old; }, 1400);
+    b.textContent = 'Applied \u2713';
+    setTimeout(() => { b.textContent = old; showSync(); }, 1600);
   }
 
   function showPseudo() {
     if (!lastResult) return;
-    const v = $('tsel').value;
-    $('pseudo').value = v === '__all__' ? lastResult.text : lastResult.targets[+v].text + '\n';
+    closeAC();
+    const t = scopeTarget();
+    $('pseudo').value = t ? t.text + '\n' : lastResult.text;
     $('pseudo').scrollTop = 0;
     $('pCopy').disabled = false; $('pDownload').disabled = false;
+    updateNote();
   }
 
-  $('tsel').onchange = showPseudo;
+  $('tsel').onchange = () => { if (discardOk()) { showPseudo(); showSync(); } };
   ['optPos','optIds','optMon','optList'].forEach(id => $(id).addEventListener('change', () => {
     if (tab !== 'pseudo') return;
-    if (!discardOk()) { $('pState').textContent = 'edited \u2014 press Compile'; return; }
+    if (!discardOk()) { setPseudoState('edited', 'edited \u2014 press Apply to project'); return; }
     runDecompile();
   }));
   $('pRefresh').onclick = () => { if (discardOk()) runDecompile(); };
   $('pCompile').onclick = runCompile;
-  $('pseudo').addEventListener('input', () => setPseudoDirty(true));
+  $('pseudo').addEventListener('input', () => {
+    setPseudoDirty(true);
+    if (acSettling) { acSettling = false; return; }
+    updateAC();
+  });
+  $('pseudo').addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      if (!$('pCompile').disabled) runCompile();
+      return;
+    }
+    if (acKey(e)) e.preventDefault();
+  });
+  $('pseudo').addEventListener('click', updateAC);
+  $('pseudo').addEventListener('blur', () => setTimeout(closeAC, 120));
+  ['scroll','resize'].forEach(ev => window.addEventListener(ev, () => { if (acItems.length) placeAC(); }));
 
   $('pCopy').onclick = async () => {
     const ta = $('pseudo');
@@ -2157,6 +2305,285 @@ const SB3Compiler = (() => {
     a.download = base + suffix + '.pseudo.txt';
     document.body.appendChild(a); a.click(); a.remove();
   };
+
+  /* ---------- autocomplete popup ----------
+     The menu is built from the very same vocabulary the decompiler prints and
+     the compiler reads, so every entry it offers is a name the text format
+     genuinely accepts. It is anchored to the caret by a hidden, textarea-shaped
+     mirror holding the text up to the caret plus a zero-width marker: the
+     marker's own offset is the anchor point. */
+  const AC_MAX = 30;
+  let acCat = null;                 // the block vocabulary, built once
+  let acItems = [], acIndex = 0;    // what the popup is offering right now
+  let acStart = 0, acHead = '';     // the range a suggestion would replace
+  let acCustom = [];                // this project's own custom blocks
+  let acSettling = false;           // ignore the input event we caused
+
+  function vocabulary () {
+    if (acCat) return acCat;
+    const V = (typeof SB3Decompiler !== 'undefined') ? SB3Decompiler.vocab : null;
+    const out = [], seen = new Set();
+    const add = (name, fill, group, ns, hint) => {
+      const k = name.toLowerCase() + '\u0000' + (ns || '');
+      if (!name || seen.has(k)) return;
+      seen.add(k);
+      out.push({ name, fill, group, ns: ns || null, hint: hint || '' });
+    };
+    if (V) {
+      // call-shaped blocks: motion_movesteps -> move({STEPS}) -> "move("
+      for (const op of Object.keys(V.TEMPLATES)) {
+        const tpl = String(V.TEMPLATES[op]);
+        const cut = tpl.indexOf('(');
+        if (cut < 1) continue;
+        const full = tpl.slice(0, cut);                 // "move", "pen.clear", "{@LIST}.add"
+        const dot = full.lastIndexOf('.');
+        const bare = dot < 0 ? full : full.slice(dot + 1);
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(bare)) continue;  // placeholders start here
+        const args = tpl.slice(cut).match(/\{[^{}]*\}/g) || [];
+        add(bare, bare + '(', 'block', dot < 0 ? null : full.slice(0, dot),
+          args.length ? op + ' \u00b7 ' + args.length + ' input' + (args.length > 1 ? 's' : '') : op);
+      }
+      for (const op of Object.keys(V.INFIX)) {
+        const t = V.INFIX[op];
+        add(Array.isArray(t) ? String(t[0]) : String(t), String(Array.isArray(t) ? t[0] : t), 'operator', null, op);
+      }
+      for (const op of Object.keys(V.HATS)) {
+        const tpl = String(V.HATS[op]);
+        add(tpl, tpl + ' {', 'hat', null, op);          // placeholders kept verbatim
+      }
+    }
+    for (const m of ['abs','floor','ceiling','sqrt','sin','cos','tan','asin','acos','atan','ln','log','e ^','10 ^'])
+      add(m, m + '(', 'math', null, 'operator_mathop');
+    for (const m of ['add','delete','clear','insert','replace','indexOf','contains','show','hide'])
+      add(m, m + '(', 'list', '@', '@list.' + m + '()');
+    for (const k of ['if','else','repeat','forever','while','until','switch','case','default',
+                     'define','call','props','stage','sprite','on','var','list','costume','sound','broadcast','props'])
+      add(k, k, 'syntax', null, '');
+    for (const m of ['//', '/*', '**', '@', '$', '%', '"', '()', '{'])
+      add(m, m, 'syntax', null, '');
+    acCat = out;
+    return out;
+  }
+
+  // Every custom block in the project, keyed on its first word so that typing
+  // "Fla" offers call "Flash"().
+  function customBlocks (obj) {
+    const seen = new Set(), out = [];
+    for (const t of (obj && obj.targets) || []) {
+      for (const id of Object.keys(t.blocks || {})) {
+        const b = t.blocks[id], m = b && b.mutation;
+        if (!m || b.opcode !== 'procedures_prototype' || !m.proccode) continue;
+        const label = String(m.proccode).split('\u0000')[0];
+        const first = /^[A-Za-z0-9_]+/.exec(label);
+        if (!label || seen.has(label)) continue;
+        seen.add(label);
+        out.push({ name: first ? first[0] : label, fill: JSON.stringify(label) + '(', group: 'custom', ns: null,
+                   sort: label.length, hint: (t.isStage ? '[stage] ' : '') + t.name });
+      }
+    }
+    return out;
+  }
+
+  // Split what is under the caret into the part that must be kept and the word
+  // being typed. "pen.cl" -> start at "p", head "pen.", word "cl", ns "pen".
+  // "$speed" -> head "$", which names a variable, not a block.
+  function acToken (ta, pos) {
+    const v = ta.value;
+    let wordStart = pos;
+    while (wordStart > 0 && /[A-Za-z0-9_]/.test(v[wordStart - 1])) wordStart--;
+    let start = wordStart;
+    if (start > 0 && v[start - 1] === '.') {
+      start -= 1;                                                   // the dot
+      while (start > 0 && /[A-Za-z0-9_]/.test(v[start - 1])) start -= 1;
+      while (start > 0 && /[$@%]/.test(v[start - 1])) start -= 1;
+    } else {
+      while (start > 0 && /[$@%]/.test(v[start - 1])) start -= 1;
+    }
+    const head = v.slice(start, wordStart);
+    // an explicit dot commits you to a single namespace
+    let ns = null;
+    if (head.endsWith('.')) {
+      ns = head.startsWith('@') ? '@' : (head.slice(0, -1).split('.').pop() || null);
+    }
+    return { start, head, ns, word: v.slice(wordStart, pos),
+             line: v.slice(v.lastIndexOf('\n', pos - 1) + 1, pos) };
+  }
+
+  // No menu inside a string, a comment or a {PLACEHOLDER}: none of those hold a
+  // block name.
+  function acContextOk (line) {
+    let inStr = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (inStr && c === '\\') { i++; continue; }
+      if (c === '"') inStr = !inStr;
+      else if (!inStr && c === '/' && line[i + 1] === '/') return false;
+    }
+    if (inStr) return false;
+    let depth = 0;
+    for (const c of line) { if (c === '{') depth++; else if (c === '}') depth--; }
+    return depth <= 0;
+  }
+
+  function acRank (word, ns) {
+    const w = word.toLowerCase();
+    const hits = [];
+    const take = (e, s) => { if (ns && e.ns !== ns) return; hits.push({ e, s }); };
+    for (const e of acCustom) {
+      const n = e.name.toLowerCase();
+      if (n === w) take(e, 0); else if (n.startsWith(w)) take(e, 1);
+      else if (w.length >= 3 && n.includes(w)) take(e, 2);
+    }
+    for (const e of vocabulary()) {
+      const n = e.name.toLowerCase();
+      if (n === w) take(e, 1); else if (n.startsWith(w)) take(e, 2);
+      else if (w.length >= 3 && n.includes(w)) take(e, 3);
+    }
+    hits.sort((a, b) => a.s - b.s || (a.e.sort || a.e.name.length) - (b.e.sort || b.e.name.length) ||
+                       a.e.name.localeCompare(b.e.name));
+    const out = [], dup = new Set();
+    for (const h of hits) {
+      const k = h.e.name.toLowerCase();
+      if (dup.has(k)) continue;      // pen.clear and @list.clear are one row here
+      dup.add(k);
+      out.push(h.e);
+      if (out.length === AC_MAX) break;
+    }
+    return out;
+  }
+
+  function updateAC () {
+    const ta = $('pseudo');
+    if (!ta || !zip || !ta.value) return closeAC();
+    const pos = ta.selectionStart;
+    if (pos !== ta.selectionEnd) return closeAC();
+    const tok = acToken(ta, pos);
+    if (!acContextOk(tok.line)) return closeAC();
+    // "$speed" and "@Warnings" name data, not blocks: leave them alone
+    if (tok.head && !tok.head.includes('.')) return closeAC();
+    let start = tok.start, head = tok.head, word = tok.word;
+    if (!word) {
+      // after "@f." offer that list's methods; after an operator, the operators
+      let c = ta.value[pos - 1] || '';
+      if (tok.head.includes('.')) word = '';
+      else {
+        let at = pos - 1;
+        if (!'+-*/<>=%&|!'.includes(c)) {
+          while (at > 0 && /[ \t]/.test(ta.value[at - 1])) at--;
+          c = ta.value[at - 1] || '';
+        }
+        if (!'+-*/<>=%&|!'.includes(c)) return closeAC();
+        word = c; start = at - 1; head = '';
+      }
+    }
+    const items = acRank(word, tok.ns);
+    if (!items.length) return closeAC();
+    acItems = items; acIndex = 0; acStart = start; acHead = head;
+    renderAC();
+  }
+
+  function closeAC () {
+    acItems = [];
+    const ul = $('acList');
+    if (ul) { ul.hidden = true; ul.replaceChildren(); }
+  }
+
+  function renderAC () {
+    const ul = $('acList');
+    ul.hidden = false;
+    ul.replaceChildren();
+    const frag = document.createDocumentFragment();
+    acItems.forEach((it, i) => {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      li.setAttribute('aria-selected', i === acIndex ? 'true' : 'false');
+      const b = document.createElement('b');
+      if (acHead) b.appendChild(document.createTextNode(acHead));
+      const u = document.createElement('u');
+      u.textContent = it.name;
+      b.appendChild(u);
+      const em = document.createElement('i');
+      em.textContent = it.hint;
+      li.append(b, em);
+      li.addEventListener('mousedown', e => { e.preventDefault(); acceptAC(i); });
+      frag.appendChild(li);
+    });
+    const foot = document.createElement('li');
+    foot.className = 'acfoot';
+    foot.textContent = acItems.length + (acItems.length === AC_MAX ? '+ of ' : ' of ') + (vocabulary().length + acCustom.length) +
+      '  \u00b7  \u2191\u2193 choose  \u00b7  Enter accept  \u00b7  Esc dismiss';
+    ul.append(frag, foot);
+    placeAC();
+  }
+
+  // Put the popup just under the caret, flipping above it near the bottom edge.
+  function placeAC () {
+    const ta = $('pseudo'), m = $('acMirror'), pop = $('acList');
+    if (!m || !pop || pop.hidden) return;
+    const cs = getComputedStyle(ta);
+    // everything that decides where a character lands has to match exactly
+    for (const k of ['fontFamily','fontSize','fontWeight','fontStyle','fontVariant',
+                     'letterSpacing','wordSpacing','lineHeight',
+                     'paddingTop','paddingRight','paddingBottom','paddingLeft',
+                     'borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth',
+                     'borderTopStyle','borderTopColor','textIndent','tabSize','textTransform',
+                     'whiteSpace','wordBreak','overflowWrap','wordWrap','textAlign'])
+      m.style[k] = cs[k];
+    // the content box has to be exactly as wide as the textarea's, or the
+    // text would wrap at a different point and the caret would be misplaced
+    m.style.boxSizing = 'content-box';
+    m.style.width = ta.clientWidth + 'px';
+    const padL = parseFloat(cs.borderLeftWidth) || 0;
+    const padT = parseFloat(cs.borderTopWidth) || 0;
+    const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5 || 16;
+
+    m.replaceChildren();
+    m.appendChild(document.createTextNode(ta.value.slice(0, acStart)));
+    const mark = document.createElement('span');
+    mark.textContent = ta.value.slice(acStart) || '\u200b';
+    m.appendChild(mark);
+
+    // the mirror holds the whole text, so undo the textarea's scroll to get
+    // where the caret is actually on screen
+    const box = ta.getBoundingClientRect(), mb = m.getBoundingClientRect();
+    const left = mb.left + padL + mark.offsetLeft - ta.scrollLeft;
+    const caretY = mb.top + padT + mark.offsetTop - ta.scrollTop;
+    pop.style.visibility = 'visible';
+    const pw = pop.offsetWidth, ph = pop.offsetHeight;
+    let top = caretY + lh + 2;
+    if (top + ph > box.bottom) top = caretY - ph - 2;
+    if (top < box.top) top = box.top;
+    if (left + pw > innerWidth - 8) left = Math.max(8, innerWidth - 8 - pw);
+    pop.style.left = Math.max(8, left) + 'px';
+    pop.style.top = top + 'px';
+  }
+
+  function acceptAC (which) {
+    const it = acItems[which == null ? acIndex : which];
+    if (!it) return;
+    const ta = $('pseudo');
+    const pos = ta.selectionStart;
+    const fill = acHead ? acHead + it.fill : it.fill;
+    ta.setRangeText(fill, acStart, pos, 'end');
+    closeAC();
+    acSettling = true;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.focus();
+  }
+
+  // Returns true when the key was consumed by the popup.
+  function acKey (e) {
+    if (!acItems.length) {
+      if (e.key === ' ' && (e.ctrlKey || e.metaKey)) { updateAC(); return !!acItems.length; }
+      return false;
+    }
+    if (e.key === 'ArrowDown') { acIndex = (acIndex + 1) % acItems.length; renderAC(); return true; }
+    if (e.key === 'ArrowUp') { acIndex = (acIndex - 1 + acItems.length) % acItems.length; renderAC(); return true; }
+    if (e.key === 'Enter' || e.key === 'Tab') { acceptAC(); return true; }
+    if (e.key === 'Escape') { closeAC(); return true; }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') { closeAC(); return false; }
+    return false;
+  }
 
   /* ---------- drag and drop ---------- */
   const panes = document.querySelector('.panes');

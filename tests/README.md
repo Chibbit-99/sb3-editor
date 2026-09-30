@@ -3,9 +3,9 @@
 Pure Node, no build step. Run from the repository root:
 
 ```
-node tests/compiler.test.js   # compiler unit tests + a full round trip
+node tests/compiler.test.js   # 51 compiler unit tests + a full round trip
 node tests/roundtrip.js       # decompile -> compile -> decompile diff of example.json
-node tests/ui.test.js         # the real page driven in jsdom (open -> edit -> compile -> repackage)
+node tests/ui.test.js         # 98 tests driving the real page in jsdom
 ```
 
 `compiler.test.js` and `roundtrip.js` have no dependencies — they lift the
@@ -41,3 +41,31 @@ Those four are inherent to the format, not bugs:
 
 `compiler.test.js` also asserts that the pseudocode is a **fixed point**: feeding
 the output of a compile back through the decompiler reproduces the same text.
+
+## What ui.test.js checks
+
+It builds a real `.sb3` in memory and drives the shipped page:
+
+* open a file, decompile, edit, apply, repackage, and read the packed
+  `project.json` back out of the archive;
+* a broken edit leaves `project.json` byte-for-byte untouched;
+* **editing a single target** — switch to one sprite, edit it, apply, and check
+  that the other five targets, the monitors and the assets are unchanged;
+* **the autocomplete popup** — the suggestions it offers, accepting one with the
+  keyboard, the cases where it must stay shut (comments, strings, `{placeholder}`
+  slots, variable names) and the arithmetic that anchors it to the caret.
+
+jsdom has no layout engine, so the popup's position is checked by giving the
+textarea and the caret marker known sizes rather than by looking at pixels.
+
+## Compiling one target on its own
+
+`SB3Compiler.compile(text, { context: projectJson })` rebuilds a single target
+and returns `{ json: target, targetName, diagnostics, fatal }` — just the target
+object, not a whole project. The rest of the project is read-only context: its
+stage globals, lists and broadcasts stay resolvable, so a sprite can use
+`$speed` or `@items` without inventing new ids, but nothing outside the target is
+rebuilt. The caller splices the result into a copy of `project.json`.
+
+Without `context`, a document with no stage is still an error. With it, the
+document is allowed to be a lone sprite — the stage is simply not part of it.
